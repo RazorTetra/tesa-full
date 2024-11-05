@@ -1,3 +1,4 @@
+// app/dashboard/siswa/page.js
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -14,46 +15,58 @@ export default function SiswaPage() {
   const [siswa, setSiswa] = useState([]);
   const [filteredSiswa, setFilteredSiswa] = useState([]);
   const [hoveredRow, setHoveredRow] = useState(null);
-  const [error, setError] = useState(null);
-  const [successMessage, setSuccessMessage] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
 
+  // Fetch data siswa
   useEffect(() => {
     const fetchSiswa = async () => {
       try {
         const response = await fetch("/api/siswa");
         const data = await response.json();
+
         if (data.success) {
           setSiswa(data.data);
           setFilteredSiswa(data.data);
         } else {
-          showError(data.error || "Gagal mengambil data");
+          showNotification("error", "Gagal mengambil data siswa", data.error);
         }
       } catch (error) {
-        console.error("Error mengambil data siswa:", error);
-        showError("Error mengambil data siswa: " + error.message);
+        showNotification(
+          "error",
+          "Error",
+          "Terjadi kesalahan saat mengambil data siswa"
+        );
+      } finally {
+        setIsLoading(false);
       }
     };
+
     fetchSiswa();
   }, []);
 
+  // Filter siswa berdasarkan pencarian
   useEffect(() => {
-    const results = siswa.filter((s) =>
-      s.nama.toLowerCase().includes(searchTerm.toLowerCase()),
+    const results = siswa.filter(
+      (s) =>
+        s.nama.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        s.nisn.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        s.kelas.toLowerCase().includes(searchTerm.toLowerCase())
     );
     setFilteredSiswa(results);
   }, [searchTerm, siswa]);
 
+  // Handle delete siswa
   const handleDelete = useCallback(async (id) => {
     const result = await MySwal.fire({
-      title: "Apakah Anda yakin?",
-      text: "Anda tidak akan dapat mengembalikan ini!",
+      title: "Konfirmasi Hapus",
+      text: "Apakah Anda yakin ingin menghapus data siswa ini?",
       icon: "warning",
       showCancelButton: true,
-      confirmButtonColor: "#3085d6",
-      cancelButtonColor: "#d33",
-      confirmButtonText: "Ya, hapus!",
+      confirmButtonText: "Ya, Hapus",
       cancelButtonText: "Batal",
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#3085d6",
     });
 
     if (result.isConfirmed) {
@@ -62,52 +75,62 @@ export default function SiswaPage() {
           method: "DELETE",
         });
         const data = await response.json();
+
         if (data.success) {
           setSiswa((prevSiswa) => prevSiswa.filter((s) => s._id !== id));
           setFilteredSiswa((prevFiltered) =>
-            prevFiltered.filter((s) => s._id !== id),
+            prevFiltered.filter((s) => s._id !== id)
           );
-          showSuccess("Siswa berhasil dihapus!");
+          showNotification(
+            "success",
+            "Berhasil",
+            "Data siswa berhasil dihapus"
+          );
         } else {
-          showError(data.error || "Gagal menghapus siswa");
+          showNotification(
+            "error",
+            "Gagal",
+            data.error || "Gagal menghapus data siswa"
+          );
         }
       } catch (error) {
-        console.error("Error menghapus siswa:", error);
-        showError("Error menghapus siswa: " + error.message);
+        showNotification(
+          "error",
+          "Error",
+          "Terjadi kesalahan saat menghapus data siswa"
+        );
       }
     }
   }, []);
 
-  const handleImageClick = (imageUrl, name) => {
+  // Handle preview image
+  const handleImagePreview = useCallback((imageUrl, nama) => {
     MySwal.fire({
-      title: name,
-      imageUrl: imageUrl,
-      imageAlt: "Foto siswa",
+      title: nama,
+      imageUrl: imageUrl || "/noavatar.png",
+      imageAlt: `Foto ${nama}`,
       showCloseButton: true,
       showConfirmButton: false,
-      customClass: {
-        popup: "custom-swal",
-      },
     });
-  };
+  }, []);
 
-  const showError = (message) => {
+  // Notification helper
+  const showNotification = (icon, title, text) => {
     MySwal.fire({
-      icon: "error",
-      title: "Oops...",
-      text: message,
-    });
-  };
-
-  const showSuccess = (message) => {
-    MySwal.fire({
-      icon: "success",
-      title: "Berhasil!",
-      text: message,
+      icon,
+      title,
+      text,
+      toast: true,
+      position: "top-end",
+      showConfirmButton: false,
       timer: 3000,
       timerProgressBar: true,
     });
   };
+
+  if (isLoading) {
+    return <div className={styles.loading}>Memuat data...</div>;
+  }
 
   return (
     <div className={styles.container}>
@@ -116,74 +139,85 @@ export default function SiswaPage() {
           <Search className={styles.searchIcon} />
           <input
             type="text"
-            placeholder="Cari siswa..."
+            placeholder="Cari berdasarkan nama, NISN, atau kelas..."
+            value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className={styles.searchInput}
           />
         </div>
         <Link href="/dashboard/siswa/tambahkan">
           <button className={styles.addButton}>
-            <UserPlus className={styles.addIcon} />
-            Tambahkan
+            <UserPlus size={20} />
+            Tambah Siswa
           </button>
         </Link>
       </div>
+
       <div className={styles.tableContainer}>
         <table className={styles.table}>
           <thead>
             <tr>
+              <th>Foto</th>
               <th>Nama</th>
               <th>NISN</th>
               <th>Kelas</th>
               <th>Alamat</th>
               <th>Status</th>
-              <th>Operasi</th>
+              <th>Aksi</th>
             </tr>
           </thead>
           <tbody>
             {filteredSiswa.length === 0 ? (
               <tr>
-                <td colSpan="6" className={styles.noData}>
-                  Tidak ada data siswa yang tersedia.
+                <td colSpan="7" className={styles.noData}>
+                  {searchTerm
+                    ? "Tidak ada data yang sesuai dengan pencarian"
+                    : "Belum ada data siswa"}
                 </td>
               </tr>
             ) : (
-              filteredSiswa.map((s, index) => (
+              filteredSiswa.map((siswa) => (
                 <tr
-                  key={s._id}
-                  className={`${styles.tableRow} ${hoveredRow === index ? styles.hovered : ""}`}
-                  onMouseEnter={() => setHoveredRow(index)}
+                  key={siswa._id}
+                  onMouseEnter={() => setHoveredRow(siswa._id)}
                   onMouseLeave={() => setHoveredRow(null)}
+                  className={hoveredRow === siswa._id ? styles.hoveredRow : ""}
                 >
                   <td>
-                    <div className={styles.user}>
-                      <Image
-                        src={s.image || "/noavatar.png"}
-                        alt={s.nama}
-                        width={40}
-                        height={40}
-                        className={styles.userImage}
-                        onClick={() =>
-                          handleImageClick(s.image || "/noavatar.png", s.nama)
-                        }
-                      />
-                      <span className={styles.userName}>{s.nama}</span>
-                    </div>
+                    <Image
+                      src={siswa.image || "/noavatar.png"}
+                      alt={`Foto ${siswa.nama}`}
+                      width={40}
+                      height={40}
+                      className={styles.userImage}
+                      onClick={() =>
+                        handleImagePreview(siswa.image, siswa.nama)
+                      }
+                    />
                   </td>
-                  <td>{s.nisn}</td>
-                  <td>{s.kelas}</td>
-                  <td>{s.alamat}</td>
-                  <td>{s.status}</td>
+                  <td>{siswa.nama}</td>
+                  <td>{siswa.nisn}</td>
+                  <td>{siswa.kelas}</td>
+                  <td>{siswa.alamat}</td>
                   <td>
-                    <div className={styles.buttons}>
-                      <Link href={`/dashboard/siswa/${s._id}`}>
-                        <button className={`${styles.button} ${styles.view}`}>
+                    <span
+                      className={`${styles.status} ${
+                        styles[siswa.status.toLowerCase()]
+                      }`}
+                    >
+                      {siswa.status}
+                    </span>
+                  </td>
+                  <td>
+                    <div className={styles.actions}>
+                      <Link href={`/dashboard/siswa/${siswa._id}`}>
+                        <button className={`${styles.button} ${styles.edit}`}>
                           Edit
                         </button>
                       </Link>
                       <button
+                        onClick={() => handleDelete(siswa._id)}
                         className={`${styles.button} ${styles.delete}`}
-                        onClick={() => handleDelete(s._id)}
                       >
                         Hapus
                       </button>

@@ -3,14 +3,17 @@ const mongoose = require("mongoose");
 
 const connectDB = async () => {
   try {
-    if (!process.env.MONGODB_URI) {
-      throw new Error("MONGODB_URI is not defined in environment variables");
-    }
-
-    const connection = await mongoose.connect(process.env.MONGODB_URI);
+    // Pastikan nama database ada dalam URI setelah hostname dan sebelum parameter
+    const MONGODB_URI = "mongodb+srv://admin:ZfwEeovOxuIIBzNT@cluster0.tlq0c.mongodb.net/tesa_skripsi?retryWrites=true&w=majority"
+    ;
     
-    console.log(`MongoDB connected successfully to database: ${connection.connection.db.databaseName}`);
-    return connection;
+    const connection = await mongoose.connect(MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    
+    // Log nama database untuk memverifikasi koneksi
+    console.log(`MongoDB Atlas connected successfully to database: ${connection.connection.db.databaseName}`);
   } catch (error) {
     console.error("MongoDB connection error:", error);
     process.exit(1);

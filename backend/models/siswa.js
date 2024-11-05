@@ -1,3 +1,4 @@
+// backend/models/siswa.js
 const mongoose = require("mongoose");
 
 const SiswaSchema = new mongoose.Schema(
@@ -8,8 +9,9 @@ const SiswaSchema = new mongoose.Schema(
     alamat: { type: String, required: true },
     status: { type: String, required: true },
     image: { type: String, default: "/noavatar.png" },
+    imagePublicId: { type: String, default: "tesa_skripsi/defaults/no-avatar" }
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
 const Siswa = mongoose.models.Siswa || mongoose.model("Siswa", SiswaSchema);

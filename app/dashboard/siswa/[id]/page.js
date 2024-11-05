@@ -1,11 +1,18 @@
+// app/dashboard/siswa/[id]/page.js
 "use client";
-import { useState, useEffect } from "react";
-import { useRouter, useParams } from "next/navigation";
-import Image from "next/image";
-import styles from "@/app/ui/dashboard/master/addEdit.module.css";
-import Swal from "sweetalert2";
 
-const SingleSiswaPage = () => {
+import { useState, useEffect, useCallback } from "react";
+import { useRouter, useParams } from "next/navigation";
+import { CldImage } from "next-cloudinary";
+import { UserCog } from "lucide-react";
+import Swal from "sweetalert2";
+import withReactContent from "sweetalert2-react-content";
+import styles from "@/app/ui/dashboard/master/addEdit.module.css";
+
+const MySwal = withReactContent(Swal);
+const DEFAULT_AVATAR_ID = "tesa_skripsi/defaults/no-avatar";
+
+const EditSiswaPage = () => {
   const router = useRouter();
   const params = useParams();
   const [formData, setFormData] = useState({
@@ -14,175 +21,339 @@ const SingleSiswaPage = () => {
     alamat: "",
     status: "",
     kelas: "",
+    image: "",
+    imagePublicId: DEFAULT_AVATAR_ID,
   });
-  const [image, setImage] = useState("/noavatar.png");
   const [errors, setErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isImageUploading, setIsImageUploading] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
+  // Fetch siswa data
   useEffect(() => {
     const fetchSiswa = async () => {
       try {
-        const { id } = params;
-        const response = await fetch(`/api/siswa/${id}`);
+        const response = await fetch(`/api/siswa/${params.id}`);
         const data = await response.json();
+
         if (data.success) {
-          setFormData(data.data);
-          setImage(data.data.image || "/noavatar.png");
+          setFormData({
+            ...data.data,
+            imagePublicId: data.data.image || DEFAULT_AVATAR_ID,
+          });
         } else {
-          console.error("Error fetching siswa:", data.error);
+          throw new Error(data.error || "Failed to fetch student data");
         }
       } catch (error) {
-        console.error("Error fetching siswa:", error);
+        MySwal.fire({
+          icon: "error",
+          title: "Error",
+          text: "Gagal mengambil data siswa",
+        });
+      } finally {
+        setIsLoading(false);
       }
     };
+
     fetchSiswa();
-  }, [params]);
+  }, [params.id]);
 
-  const handleChange = (e) => {
+  // Handle input changes
+  const handleChange = useCallback((e) => {
     const { name, value } = e.target;
-    setFormData((prevState) => ({ ...prevState, [name]: value }));
-  };
+    setErrors((prev) => ({ ...prev, [name]: "" }));
 
-  const handleNisnChange = (e) => {
-    const { name, value } = e.target;
-    if (/^\d*$/.test(value)) {
-      setFormData((prevState) => ({ ...prevState, [name]: value }));
+    if (name === "nisn") {
+      if (/^\d{0,10}$/.test(value)) {
+        setFormData((prev) => ({ ...prev, [name]: value }));
+      }
+      return;
     }
-  };
 
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImage(reader.result);
-      };
-      reader.readAsDataURL(file);
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  }, []);
+
+  // Handle image upload
+  const handleImageUpload = useCallback(
+    async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+
+      if (file.size > 2 * 1024 * 1024) {
+        MySwal.fire({
+          icon: "error",
+          title: "File Terlalu Besar",
+          text: "Ukuran file maksimal 2MB",
+        });
+        return;
+      }
+
+      if (!file.type.startsWith("image/")) {
+        MySwal.fire({
+          icon: "error",
+          title: "Format File Salah",
+          text: "Mohon upload file gambar (JPG, PNG, etc)",
+        });
+        return;
+      }
+
+      setIsImageUploading(true);
+
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        formData.append("entityType", "siswa");
+        formData.append("entityId", params.id);
+
+        const response = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+
+        if (data.success) {
+          setFormData((prev) => ({
+            ...prev,
+            image: data.fileName,
+            imagePublicId: data.publicId,
+          }));
+          setImageError(false);
+          MySwal.fire({
+            icon: "success",
+            title: "Berhasil",
+            text: "Foto berhasil diupload",
+            timer: 1500,
+            showConfirmButton: false,
+          });
+        } else {
+          throw new Error(data.error || "Gagal upload gambar");
+        }
+      } catch (error) {
+        console.error("Upload error:", error);
+        MySwal.fire({
+          icon: "error",
+          title: "Gagal Upload",
+          text: error.message,
+        });
+        setImageError(true);
+      } finally {
+        setIsImageUploading(false);
+      }
+    },
+    [params.id]
+  );
+
+  // Form validation
+  const validateForm = useCallback(() => {
+    const newErrors = {};
+
+    if (!formData.nama.trim()) {
+      newErrors.nama = "Nama harus diisi";
     }
-  };
 
-  const validateForm = () => {
-    let errors = {};
-    if (!formData.nama) errors.nama = "Nama harus diisi";
-    if (!formData.nisn) errors.nisn = "NISN harus diisi";
-    if (!formData.alamat) errors.alamat = "Alamat harus diisi";
-    if (!formData.status) errors.status = "Status harus dipilih";
-    if (!formData.kelas) errors.kelas = "Kelas harus dipilih";
-    return errors;
-  };
+    if (!formData.nisn) {
+      newErrors.nisn = "NISN harus diisi";
+    } else if (formData.nisn.length !== 10) {
+      newErrors.nisn = "NISN harus 10 digit";
+    }
 
+    if (!formData.alamat.trim()) {
+      newErrors.alamat = "Alamat harus diisi";
+    }
+
+    if (!formData.status) {
+      newErrors.status = "Status harus dipilih";
+    }
+
+    if (!formData.kelas) {
+      newErrors.kelas = "Kelas harus dipilih";
+    }
+
+    return newErrors;
+  }, [formData]);
+
+  // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
     const validationErrors = validateForm();
-    if (Object.keys(validationErrors).length === 0) {
+
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
+      MySwal.fire({
+        icon: "error",
+        title: "Validasi Gagal",
+        text: "Mohon lengkapi semua field yang diperlukan",
+      });
+      return;
+    }
+
+    const result = await MySwal.fire({
+      title: "Apakah anda yakin?",
+      text: "Data siswa akan diperbarui",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#3085d6",
+      cancelButtonColor: "#d33",
+      confirmButtonText: "Ya, perbarui",
+      cancelButtonText: "Batal",
+    });
+
+    if (result.isConfirmed) {
+      setIsSubmitting(true);
+
       try {
         const response = await fetch(`/api/siswa/${params.id}`, {
           method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ ...formData, image }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(formData),
         });
+
         const data = await response.json();
+
         if (data.success) {
-          Swal.fire({
-            title: "Apakah kamu ingin menyimpan perubahan?",
-            showDenyButton: true,
-            showCancelButton: true,
-            confirmButtonText: "Ya, simpan",
-            denyButtonText: `Tidak, batalkan`,
-          }).then((result) => {
-            if (result.isConfirmed) {
-              Swal.fire("Saved!", "", "success").then(() => {
-                router.push("/dashboard/siswa");
-              });
-            } else if (result.isDenied) {
-              Swal.fire("Changes are not saved", "", "info");
-            }
+          await MySwal.fire({
+            icon: "success",
+            title: "Berhasil!",
+            text: "Data siswa berhasil diperbarui",
+            timer: 2000,
+            showConfirmButton: false,
           });
+          router.push("/dashboard/siswa");
+          router.refresh();
         } else {
-          setErrors({ submit: data.error });
+          throw new Error(data.error || "Gagal memperbarui data siswa");
         }
       } catch (error) {
-        setErrors({ submit: "Terjadi kesalahan saat mengedit siswa" });
+        MySwal.fire({
+          icon: "error",
+          title: "Gagal",
+          text: error.message,
+        });
+      } finally {
+        setIsSubmitting(false);
       }
-    } else {
-      setErrors(validationErrors);
     }
   };
 
+  if (isLoading) {
+    return <div className={styles.loading}>Loading...</div>;
+  }
+
   return (
-    <div className={styles.container}>
+    <div className={`${styles.container} ${styles.fadeIn}`}>
       <div className={styles.infoContainer}>
         <div
-          className={styles.imgContainer}
-          onClick={() => document.getElementById("file-input").click()}
+          className={`${styles.imgContainer} ${
+            isImageUploading ? styles.uploading : ""
+          }`}
+          onClick={() =>
+            !isImageUploading && document.getElementById("file-input").click()
+          }
+          style={{ cursor: isImageUploading ? "wait" : "pointer" }}
         >
-          <Image src={image} alt="Siswa Avatar" fill />
+          <CldImage
+            src={formData.imagePublicId}
+            width={200}
+            height={200}
+            crop="fill"
+            gravity="face"
+            alt="Foto Siswa"
+            className={styles.avatar}
+            onError={() => setImageError(true)}
+          />
           <input
             id="file-input"
             type="file"
             accept="image/*"
             onChange={handleImageUpload}
             style={{ display: "none" }}
+            disabled={isImageUploading}
           />
+          {isImageUploading && (
+            <div className={styles.uploadingOverlay}>
+              <span>Mengupload...</span>
+            </div>
+          )}
         </div>
         <p className={styles.description}>
-          Klik gambar di atas untuk "mengedit" foto profil...
+          {isImageUploading
+            ? "Mengupload foto..."
+            : "Klik gambar di atas untuk mengubah foto profil"}
         </p>
+        {imageError && (
+          <p className={styles.errorText}>
+            Gagal memuat gambar. Silakan coba upload ulang.
+          </p>
+        )}
       </div>
-      <div className={styles.formContainer}>
+
+      <div className={`${styles.formContainer} ${styles.fadeIn}`}>
         <form onSubmit={handleSubmit} className={styles.form}>
           <div className={styles.inputGroup}>
-            <label className={styles.label}>Nama</label>
+            <label htmlFor="nama">Nama Lengkap</label>
             <input
+              id="nama"
               type="text"
               name="nama"
               value={formData.nama}
               onChange={handleChange}
-              className={styles.input}
+              className={errors.nama ? styles.inputError : styles.input}
+              placeholder="Masukkan nama lengkap"
+              disabled={isSubmitting}
             />
             {errors.nama && <span className={styles.error}>{errors.nama}</span>}
           </div>
+
           <div className={styles.inputGroup}>
-            <label className={styles.label}>NISN</label>
+            <label htmlFor="nisn">NISN</label>
             <input
+              id="nisn"
               type="text"
               name="nisn"
               value={formData.nisn}
-              onKeyPress={(e) => {
-                if (!/^\d$/.test(e.key)) {
-                  e.preventDefault();
-                }
-              }}
-              onChange={handleNisnChange}
-              className={styles.input}
+              onChange={handleChange}
+              className={errors.nisn ? styles.inputError : styles.input}
+              placeholder="Masukkan 10 digit NISN"
+              maxLength={10}
+              disabled={isSubmitting}
             />
             {errors.nisn && <span className={styles.error}>{errors.nisn}</span>}
           </div>
+
           <div className={styles.inputGroup}>
-            <label className={styles.label}>Alamat</label>
+            <label htmlFor="alamat">Alamat</label>
             <input
+              id="alamat"
               type="text"
               name="alamat"
               value={formData.alamat}
               onChange={handleChange}
-              className={styles.input}
+              className={errors.alamat ? styles.inputError : styles.input}
+              placeholder="Masukkan alamat lengkap"
+              disabled={isSubmitting}
             />
             {errors.alamat && (
               <span className={styles.error}>{errors.alamat}</span>
             )}
           </div>
+
           <div className={styles.inputGroup}>
-            <label className={styles.label}>Status</label>
+            <label htmlFor="status">Status</label>
             <select
+              id="status"
               name="status"
               value={formData.status}
               onChange={handleChange}
-              className={styles.select}
+              className={errors.status ? styles.selectError : styles.select}
+              disabled={isSubmitting}
             >
-              <option value="" disabled>
-                Pilih Status
-              </option>
+              <option value="">Pilih Status</option>
               <option value="Siswa">Siswa</option>
               <option value="Siswa Baru">Siswa Baru</option>
               <option value="Siswa Pindah">Siswa Pindah</option>
@@ -192,17 +363,18 @@ const SingleSiswaPage = () => {
               <span className={styles.error}>{errors.status}</span>
             )}
           </div>
+
           <div className={styles.inputGroup}>
-            <label className={styles.label}>Kelas</label>
+            <label htmlFor="kelas">Kelas</label>
             <select
+              id="kelas"
               name="kelas"
               value={formData.kelas}
               onChange={handleChange}
-              className={styles.select}
+              className={errors.kelas ? styles.selectError : styles.select}
+              disabled={isSubmitting}
             >
-              <option value="" disabled>
-                Pilih Kelas
-              </option>
+              <option value="">Pilih Kelas</option>
               <option value="VII A">VII A</option>
               <option value="VII B">VII B</option>
               <option value="VIII A">VIII A</option>
@@ -214,11 +386,14 @@ const SingleSiswaPage = () => {
               <span className={styles.error}>{errors.kelas}</span>
             )}
           </div>
-          {errors.submit && (
-            <span className={styles.error}>{errors.submit}</span>
-          )}
-          <button type="submit" className={styles.button}>
-            Selesai
+
+          <button
+            type="submit"
+            className={`${styles.button} ${styles.fadeIn}`}
+            disabled={isSubmitting || isImageUploading}
+          >
+            <UserCog size={20} />
+            {isSubmitting ? "Menyimpan..." : "Update Data"}
           </button>
         </form>
       </div>
@@ -226,4 +401,4 @@ const SingleSiswaPage = () => {
   );
 };
 
-export default SingleSiswaPage;
+export default EditSiswaPage;
