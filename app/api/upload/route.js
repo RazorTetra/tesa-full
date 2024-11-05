@@ -12,7 +12,7 @@ export async function POST(request) {
   try {
     const formData = await request.formData();
     const file = formData.get("file");
-    const entityType = formData.get("entityType") || "misc"; 
+    const entityType = formData.get("entityType") || "misc";
     const entityId = formData.get("entityId") || Date.now().toString();
 
     if (!file) {
@@ -22,14 +22,14 @@ export async function POST(request) {
       );
     }
 
-    // Convert file to base64
+    // Convert file untuk upload
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
     const base64String = buffer.toString("base64");
     const base64File = `data:${file.type};base64,${base64String}`;
 
-    // Upload to Cloudinary
-    const uploadResponse = await new Promise((resolve, reject) => {
+    // Upload ke Cloudinary
+    const uploadResult = await new Promise((resolve, reject) => {
       cloudinary.uploader.upload(
         base64File,
         {
@@ -47,15 +47,25 @@ export async function POST(request) {
       );
     });
 
+    console.log("Upload result:", uploadResult); // Tambahkan log
+
+    if (!uploadResult || !uploadResult.secure_url) {
+      throw new Error("Failed to get upload URL");
+    }
+
     return NextResponse.json({
       success: true,
-      fileName: uploadResponse.secure_url,
-      publicId: uploadResponse.public_id,
+      fileName: uploadResult.secure_url,
+      publicId: uploadResult.public_id,
+      uploadResult, // Tambahkan ini untuk debugging
     });
   } catch (error) {
-    console.error("Error uploading file:", error);
+    console.error("Upload error:", error);
     return NextResponse.json(
-      { success: false, error: error.message },
+      {
+        success: false,
+        error: error.message || "Failed to upload file",
+      },
       { status: 500 }
     );
   }

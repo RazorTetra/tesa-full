@@ -2,30 +2,17 @@
 "use client";
 
 import { useState } from 'react';
-import { CldImage } from 'next-cloudinary';
-import { DEFAULT_AVATAR_URL, DEFAULT_AVATAR_ID } from '@/app/constants/images';
+import Image from 'next/image';
 
 export function CloudinaryImage({ src, ...props }) {
   const [error, setError] = useState(false);
-
-  if (error) {
-    return (
-      <img 
-        src={DEFAULT_AVATAR_URL}
-        alt={props.alt || "Default avatar"}
-        className={props.className}
-        width={props.width}
-        height={props.height}
-      />
-    );
-  }
-
-  const publicId = src || DEFAULT_AVATAR_ID;
+  const imageSrc = error || !src ? '/noavatar.png' : src;
 
   return (
-    <CldImage
+    <Image 
       {...props}
-      src={publicId}
+      src={imageSrc}
+      alt={props.alt || "Default avatar"}
       onError={() => setError(true)}
     />
   );

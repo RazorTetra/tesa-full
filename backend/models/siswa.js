@@ -9,7 +9,7 @@ const SiswaSchema = new mongoose.Schema(
     alamat: { type: String, required: true },
     status: { type: String, required: true },
     image: { type: String, default: "/noavatar.png" },
-    imagePublicId: { type: String, default: "tesa_skripsi/defaults/no-avatar" }
+    imagePublicId: { type: String, default: "" }
   },
   { timestamps: true }
 );

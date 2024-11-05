@@ -3,14 +3,13 @@
 
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { CldImage } from "next-cloudinary";
+import Image from "next/image";
 import { UserPlus } from "lucide-react";
 import Swal from "sweetalert2";
 import withReactContent from "sweetalert2-react-content";
 import styles from "@/app/ui/dashboard/master/addEdit.module.css";
 
 const MySwal = withReactContent(Swal);
-const DEFAULT_AVATAR_ID = "tesa_skripsi/defaults/no-avatar";
 
 const AddSiswaPage = () => {
   const router = useRouter();
@@ -20,8 +19,7 @@ const AddSiswaPage = () => {
     alamat: "",
     status: "",
     kelas: "",
-    image: DEFAULT_AVATAR_ID,
-    imagePublicId: DEFAULT_AVATAR_ID,
+    image: "/noavatar.png",
   });
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -70,7 +68,6 @@ const AddSiswaPage = () => {
     setIsImageUploading(true);
 
     try {
-      // Create FormData
       const formData = new FormData();
       formData.append("file", file);
       formData.append("entityType", "siswa");
@@ -81,17 +78,12 @@ const AddSiswaPage = () => {
         body: formData,
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
       const data = await response.json();
 
       if (data.success) {
         setFormData((prev) => ({
           ...prev,
           image: data.fileName,
-          imagePublicId: data.publicId,
         }));
         setImageError(false);
         MySwal.fire({
@@ -116,7 +108,6 @@ const AddSiswaPage = () => {
       setIsImageUploading(false);
     }
   }, []);
-
   // Form validation
   const validateForm = useCallback(() => {
     const newErrors = {};
@@ -208,15 +199,13 @@ const AddSiswaPage = () => {
           }
           style={{ cursor: isImageUploading ? "wait" : "pointer" }}
         >
-          <CldImage
-            src={formData.imagePublicId}
+          <Image
+            src={formData.image}
             width={200}
             height={200}
-            crop="fill"
-            gravity="face"
             alt="Foto Siswa"
             className={styles.avatar}
-            onError={() => setImageError(true)}
+            priority
           />
           <input
             id="file-input"

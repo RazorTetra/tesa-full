@@ -3,49 +3,55 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { CldImage } from "next-cloudinary";
+import Image from "next/image";
 import { UserCog } from "lucide-react";
 import Swal from "sweetalert2";
 import withReactContent from "sweetalert2-react-content";
 import styles from "@/app/ui/dashboard/master/addEdit.module.css";
 
 const MySwal = withReactContent(Swal);
-const DEFAULT_AVATAR_ID = "tesa_skripsi/defaults/no-avatar";
 
 const EditSiswaPage = () => {
   const router = useRouter();
   const params = useParams();
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isImageUploading, setIsImageUploading] = useState(false);
+  const [imageError, setImageError] = useState(false);
+  const [errors, setErrors] = useState({});
   const [formData, setFormData] = useState({
     nama: "",
     nisn: "",
     alamat: "",
     status: "",
     kelas: "",
-    image: "",
-    imagePublicId: DEFAULT_AVATAR_ID,
+    image: "/noavatar.png",
+    imagePublicId: "", // Tambahkan ini untuk tracking gambar di Cloudinary
   });
-  const [errors, setErrors] = useState({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isImageUploading, setIsImageUploading] = useState(false);
-  const [imageError, setImageError] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch siswa data
   useEffect(() => {
     const fetchSiswa = async () => {
       try {
         const response = await fetch(`/api/siswa/${params.id}`);
         const data = await response.json();
 
+        console.log("Fetched student data:", data); // Tambahkan log
+
         if (data.success) {
-          setFormData({
+          const formattedData = {
             ...data.data,
-            imagePublicId: data.data.image || DEFAULT_AVATAR_ID,
-          });
+            image: data.data.image || "/noavatar.png",
+            imagePublicId: data.data.imagePublicId || "",
+          };
+
+          console.log("Formatted data:", formattedData); // Tambahkan log
+
+          setFormData(formattedData);
         } else {
           throw new Error(data.error || "Failed to fetch student data");
         }
       } catch (error) {
+        console.error("Fetch error:", error); // Tambahkan log
         MySwal.fire({
           icon: "error",
           title: "Error",
@@ -101,19 +107,42 @@ const EditSiswaPage = () => {
       setIsImageUploading(true);
 
       try {
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("entityType", "siswa");
-        formData.append("entityId", params.id);
+        // Hapus gambar lama jika ada dan bukan default
+        if (formData.imagePublicId) {
+          // Ubah kondisi ini
+          try {
+            console.log("Attempting to delete:", formData.imagePublicId); // Tambahkan log
+            const deleteResponse = await fetch("/api/upload/delete", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                publicId: formData.imagePublicId,
+              }),
+            });
+
+            const deleteData = await deleteResponse.json(); // Tambahkan ini
+            console.log("Delete response:", deleteData); // Tambahkan ini
+
+            if (!deleteResponse.ok) {
+              console.warn("Failed to delete old image:", deleteData);
+            }
+          } catch (error) {
+            console.warn("Error deleting old image:", error);
+          }
+        }
+
+        // Upload gambar baru
+        const uploadFormData = new FormData();
+        uploadFormData.append("file", file);
+        uploadFormData.append("entityType", "siswa");
+        uploadFormData.append("entityId", params.id);
 
         const response = await fetch("/api/upload", {
           method: "POST",
-          body: formData,
+          body: uploadFormData,
         });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
 
         const data = await response.json();
 
@@ -146,7 +175,7 @@ const EditSiswaPage = () => {
         setIsImageUploading(false);
       }
     },
-    [params.id]
+    [params.id, formData.image, formData.imagePublicId]
   );
 
   // Form validation
@@ -241,6 +270,12 @@ const EditSiswaPage = () => {
     }
   };
 
+  const handleImageClick = () => {
+    if (!isImageUploading) {
+      document.getElementById("file-input").click();
+    }
+  };
+
   if (isLoading) {
     return <div className={styles.loading}>Loading...</div>;
   }
@@ -252,20 +287,16 @@ const EditSiswaPage = () => {
           className={`${styles.imgContainer} ${
             isImageUploading ? styles.uploading : ""
           }`}
-          onClick={() =>
-            !isImageUploading && document.getElementById("file-input").click()
-          }
+          onClick={handleImageClick}
           style={{ cursor: isImageUploading ? "wait" : "pointer" }}
         >
-          <CldImage
-            src={formData.imagePublicId}
+          <Image
+            src={formData.image}
             width={200}
             height={200}
-            crop="fill"
-            gravity="face"
             alt="Foto Siswa"
             className={styles.avatar}
-            onError={() => setImageError(true)}
+            priority
           />
           <input
             id="file-input"
