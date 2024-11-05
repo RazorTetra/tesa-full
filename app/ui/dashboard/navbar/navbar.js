@@ -1,8 +1,10 @@
-"use client"
+// app/dashboard/_components/navbar.js
+"use client";
 
-import { useState, useEffect } from "react"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { signOut } from "next-auth/react";
 import {
   MdDashboard,
   MdSupervisedUserCircle,
@@ -14,8 +16,9 @@ import {
   MdClose,
   MdExpandMore,
   MdExpandLess,
-} from "react-icons/md"
-import styles from "./navbar.module.css"
+  MdLogout,
+} from "react-icons/md";
+import styles from "./navbar.module.css";
 
 const menuItems = [
   {
@@ -30,7 +33,11 @@ const menuItems = [
       { title: "Users", path: "/dashboard/users", icon: <MdPeople /> },
       { title: "Siswa", path: "/dashboard/siswa", icon: <MdSchool /> },
       { title: "Guru", path: "/dashboard/guru", icon: <MdPeople /> },
-      { title: "Mutasi Siswa", path: "/dashboard/mutasi", icon: <MdAssignment /> },
+      {
+        title: "Mutasi Siswa",
+        path: "/dashboard/mutasi",
+        icon: <MdAssignment />,
+      },
     ],
   },
   {
@@ -38,40 +45,53 @@ const menuItems = [
     path: "/dashboard/absen",
     icon: <MdOutlineLibraryBooks />,
   },
-]
+];
 
 export default function Navbar() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const [isScrolled, setIsScrolled] = useState(false)
-  const [openDropdown, setOpenDropdown] = useState(null)
-  const pathname = usePathname()
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [openDropdown, setOpenDropdown] = useState(null);
+  const pathname = usePathname();
+  const router = useRouter();
 
   useEffect(() => {
     const handleScroll = () => {
-      setIsScrolled(window.scrollY > 50)
-    }
+      setIsScrolled(window.scrollY > 50);
+    };
 
-    window.addEventListener('scroll', handleScroll)
-    return () => window.removeEventListener('scroll', handleScroll)
-  }, [])
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   const getCurrentPageTitle = () => {
     for (const item of menuItems) {
-      if (item.path === pathname) return item.title
+      if (item.path === pathname) return item.title;
       if (item.subItems) {
-        const subItem = item.subItems.find(sub => sub.path === pathname)
-        if (subItem) return subItem.title
+        const subItem = item.subItems.find((sub) => sub.path === pathname);
+        if (subItem) return subItem.title;
       }
     }
-    return "Dashboard"
-  }
+    return "Dashboard";
+  };
 
   const toggleDropdown = (index) => {
-    setOpenDropdown(openDropdown === index ? null : index)
-  }
+    setOpenDropdown(openDropdown === index ? null : index);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut({
+        redirect: false,
+        callbackUrl: "/login",
+      });
+      router.push("/login");
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
+  };
 
   return (
-    <nav className={`${styles.navbar} ${isScrolled ? styles.hidden : ''}`}>
+    <nav className={`${styles.navbar} ${isScrolled ? styles.hidden : ""}`}>
       <div className={styles.left}>
         <Link href="/dashboard" className={styles.logoLink}>
           <img
@@ -85,7 +105,7 @@ export default function Navbar() {
         </Link>
       </div>
 
-      <button 
+      <button
         className={styles.menuButton}
         onClick={() => setIsMenuOpen(!isMenuOpen)}
         aria-label="Toggle menu"
@@ -93,13 +113,13 @@ export default function Navbar() {
         {isMenuOpen ? <MdClose /> : <MdMenu />}
       </button>
 
-      <div className={`${styles.center} ${isMenuOpen ? styles.menuOpen : ''}`}>
+      <div className={`${styles.center} ${isMenuOpen ? styles.menuOpen : ""}`}>
         {menuItems.map((item, index) => (
           <div key={item.title} className={styles.menuItemWrapper}>
             {item.subItems ? (
               <>
-                <button 
-                  className={styles.menuItem} 
+                <button
+                  className={styles.menuItem}
                   onClick={() => toggleDropdown(index)}
                 >
                   <span className={styles.menuIcon}>{item.icon}</span>
@@ -136,11 +156,20 @@ export default function Navbar() {
             )}
           </div>
         ))}
+        <button
+          onClick={handleLogout}
+          className={`${styles.menuItem} ${styles.logoutButton}`}
+        >
+          <span className={styles.menuIcon}>
+            <MdLogout />
+          </span>
+          <span className={styles.menuText}>Logout</span>
+        </button>
       </div>
 
       <div className={styles.right}>
         <h1 className={styles.pageTitle}>{getCurrentPageTitle()}</h1>
       </div>
     </nav>
-  )
+  );
 }

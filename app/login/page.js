@@ -1,7 +1,9 @@
+// app/login/page.js
 "use client";
 import React, { useState } from "react";
-import { Eye, EyeOff, User, Lock,} from "lucide-react";
+import { Eye, EyeOff, User, Lock } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { signIn } from "next-auth/react";
 import styles from "../ui/login/login.module.css";
 
 export default function LoginPage() {
@@ -11,6 +13,7 @@ export default function LoginPage() {
     password: "",
   });
   const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
   const handleChange = (e) => {
@@ -21,22 +24,25 @@ export default function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setIsLoading(true);
+
     try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formData),
+      const result = await signIn("credentials", {
+        username: formData.username,
+        password: formData.password,
+        redirect: false,
       });
-      const data = await response.json();
-      if (data.success) {
-        router.push("/dashboard");
+
+      if (result.error) {
+        setError("Username atau password salah");
       } else {
-        setError(data.message || "Login failed");
+        router.replace("/dashboard");
+        router.refresh();
       }
     } catch (err) {
-      setError("An error occurred. Please try again.");
+      setError("Terjadi kesalahan. Silakan coba lagi.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -60,6 +66,7 @@ export default function LoginPage() {
               value={formData.username}
               onChange={handleChange}
               required
+              disabled={isLoading}
             />
           </div>
           <div className={styles.inputGroup}>
@@ -72,18 +79,24 @@ export default function LoginPage() {
               value={formData.password}
               onChange={handleChange}
               required
+              disabled={isLoading}
             />
             <button
               type="button"
               className={styles.togglePassword}
               onClick={() => setShowPassword(!showPassword)}
+              disabled={isLoading}
             >
               {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
             </button>
           </div>
           {error && <p className={styles.error}>{error}</p>}
-          <button type="submit" className={styles.loginButton}>
-            <span>Login</span>
+          <button 
+            type="submit" 
+            className={styles.loginButton}
+            disabled={isLoading}
+          >
+            <span>{isLoading ? "Loading..." : "Login"}</span>
           </button>
         </form>
       </div>
