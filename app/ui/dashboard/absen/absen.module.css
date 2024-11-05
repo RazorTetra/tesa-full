@@ -1,0 +1,69 @@
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+  margin-top: 40px;
+  padding: 0 15px;
+}
+
+.gridMataPelajaran {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1.5rem;
+}
+
+.kartuMataPelajaran {
+  height: 20vh;
+  width: 100%;
+  background-color: var(--bgSoft);
+  border: none;
+  border-radius: 8px;
+  padding: 1.4rem;
+  font-size: 1rem;
+  font-weight: bold;
+  color: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  animation: fadeInUp 0.5s ease-out;
+  box-shadow: 0 0 15px -3px rgba(7, 216, 146, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.kartuMataPelajaran:hover {
+  background-color: #0f766e;
+  box-shadow: 0 0 15px -3px rgba(7, 216, 146, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.1);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 800px) {
+  .gridMataPelajaran {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+}
+
+@media (max-width: 500px) {
+  .gridMataPelajaran {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,99 @@
+.container {
+  max-width: 600px; /* Ukuran tetap */
+  margin: 0 auto;
+  padding: 2rem; /* Ukuran tetap */
+}
+
+.formulir {
+  background-color: var(--bgSoft);
+  border-radius: 8px; /* Sesuaikan dengan gaya kedua */
+  padding: 2rem; /* Ukuran tetap */
+  box-shadow:
+    0 0 15px -3px rgba(7, 216, 146, 0.1),
+    0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  animation: slideIn 0.5s ease-out;
+  margin-top: 35px; /* Ukuran tetap */
+}
+
+.judul {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: var(--textSoft);
+}
+
+.formGroup {
+  margin-bottom: 1rem; /* Ukuran tetap */
+}
+
+.label {
+  display: flex; /* Ubah ke flex */
+  align-items: center;
+  gap: 0.5rem; /* Jarak antar elemen */
+  font-size: 18px; /* Ukuran tetap */
+  font-weight: 400; /* Sesuaikan berat font */
+  color: var(--textSoft);
+}
+
+.input,
+.select {
+  width: 100%;
+  padding: 0.5rem; /* Tetap seperti sebelumnya */
+  background-color: #212c3d; /* Warna latar belakang sesuai gaya kedua */
+  border-radius: 4px; /* Sesuaikan radius border */
+  transition: all 0.3s ease;
+  color: white;
+}
+
+.input:focus,
+.select:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px #109485; /* Warna efek fokus */
+}
+
+.tombolKirim {
+  display: block;
+  width: 100%;
+  margin-top: 2rem; /* Ukuran tetap */
+  padding: 1rem; /* Ukuran tetap */
+  background-color: #14b8a6;
+  color: white; /* Tetap putih */
+  border: none;
+  border-radius: 4px; /* Sesuaikan radius border */
+  font-size: 1.1rem; /* Ukuran tetap */
+  font-weight: bold; /* Ukuran tetap */
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem; /* Jarak antar teks dan ikon */
+}
+
+.tombolKirim:hover {
+  background-color: #0f766e;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.fadeIn {
+  animation: fadeIn 0.5s ease-out;
+}

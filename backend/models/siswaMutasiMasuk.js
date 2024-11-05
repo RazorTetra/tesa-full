@@ -1,0 +1,22 @@
+const mongoose = require("mongoose");
+
+const SiswaMutasiMasukSchema = new mongoose.Schema(
+  {
+    nama: { type: String, required: true },
+    nisn: { type: String, required: true },
+    kelas: { type: String, required: true },
+    alamat: { type: String, required: true },
+    tanggalMasuk: { type: Date, required: true },
+    nomorSurat: { type: String, required: true },
+    asalSekolah: { type: String, required: true },
+    alasan: { type: String, required: true },
+    image: { type: String, default: "/noavatar.png" },
+  },
+  { timestamps: true },
+);
+
+const SiswaMutasiMasuk =
+  mongoose.models.SiswaMutasiMasuk ||
+  mongoose.model("SiswaMutasiMasuk", SiswaMutasiMasukSchema);
+
+module.exports = SiswaMutasiMasuk;
