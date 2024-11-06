@@ -6,10 +6,16 @@ export default withAuth(
   function middleware(req) {
     const token = req.nextauth.token;
     const isAdminRoute = req.nextUrl.pathname.startsWith("/dashboard/admin");
+    const isStudentRoute = req.nextUrl.pathname.startsWith("/dashboard/siswa");
     
     // Jika mencoba mengakses route admin tapi bukan admin
     if (isAdminRoute && token?.role !== "admin") {
       return NextResponse.redirect(new URL("/dashboard", req.url));
+    }
+
+    // Jika user biasa mencoba mengakses data siswa lain
+    if (isStudentRoute && token?.role === "user" && !req.nextUrl.pathname.includes(token.id)) {
+      return NextResponse.redirect(new URL("/dashboard/siswa/" + token.id, req.url));
     }
 
     return NextResponse.next();
@@ -18,14 +24,10 @@ export default withAuth(
     callbacks: {
       authorized: ({ req, token }) => {
         if (req.nextUrl.pathname.startsWith("/dashboard")) {
-          return !!token; // Harus login untuk akses dashboard
+          return !!token;
         }
         return true;
       },
     },
   }
 );
-
-export const config = {
-  matcher: ["/dashboard/:path*"]
-};

@@ -44,6 +44,7 @@
     "recharts": "2.9.0",
     "sweetalert2": "^11.14.4",
     "sweetalert2-react-content": "^5.0.7",
+    "swr": "^2.2.5",
     "uuid": "^11.0.2"
   },
   "devDependencies": {

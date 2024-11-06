@@ -17,6 +17,8 @@ export default function SiswaPage() {
   const [hoveredRow, setHoveredRow] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const { data: session } = useSession();
+  const [currentUserData, setCurrentUserData] = useState(null);
 
   // Fetch data siswa
   useEffect(() => {
@@ -44,6 +46,25 @@ export default function SiswaPage() {
 
     fetchSiswa();
   }, []);
+
+  // Hanya tampilkan data siswa yang sesuai dengan user yang login
+  useEffect(() => {
+    if (session?.user?.role === "user") {
+      const getCurrentUserData = async () => {
+        try {
+          const response = await fetch(`/api/siswa/${session.user.id}`);
+          const data = await response.json();
+          if (data.success) {
+            setCurrentUserData(data.data);
+            setFilteredSiswa([data.data]);
+          }
+        } catch (error) {
+          console.error("Error fetching current user data:", error);
+        }
+      };
+      getCurrentUserData();
+    }
+  }, [session]);
 
   // Filter siswa berdasarkan pencarian
   useEffect(() => {
@@ -145,12 +166,14 @@ export default function SiswaPage() {
             className={styles.searchInput}
           />
         </div>
-        <Link href="/dashboard/siswa/tambahkan">
-          <button className={styles.addButton}>
-            <UserPlus size={20} />
-            Tambah Siswa
-          </button>
-        </Link>
+        {session?.user?.role === "admin" && (
+          <Link href="/dashboard/siswa/tambahkan">
+            <button className={styles.addButton}>
+              <UserPlus size={20} />
+              Tambah Siswa
+            </button>
+          </Link>
+        )}
       </div>
 
       <div className={styles.tableContainer}>

@@ -1,10 +1,12 @@
-// app/dashboard/page.js
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import Swal from "sweetalert2";
 import withReactContent from "sweetalert2-react-content";
+import useSWR from "swr";
+import LoadingIndicator from "../components/LoadingIndicator";
+import { SubjectCardSkeleton } from "../components/SubjectCardSkeleton";
 
 const MySwal = withReactContent(Swal);
 
@@ -24,6 +26,13 @@ const mataPelajaran = [
   "SENI",
   "PROJECT P5",
 ];
+
+// Fetcher function for SWR
+const fetcher = async (url) => {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Failed to fetch data");
+  return res.json();
+};
 
 function Card({ title, value, change, isHovered }) {
   const isPositive = change >= 0;
@@ -153,11 +162,20 @@ function SubjectCard({ subject, attendanceData, onViewAttendance }) {
     >
       <div>
         <h3 className="text-2xl font-semibold mb-2 text-white">{subject}</h3>
-        <p className="text-gray-200">Jumlah Hadir: {presentCount}</p>
+        {attendanceData.length === 0 ? (
+          <p className="text-gray-400">Belum ada absensi hari ini</p>
+        ) : (
+          <p className="text-gray-200">Jumlah Hadir: {presentCount}</p>
+        )}
       </div>
       <button
         onClick={() => onViewAttendance(subject, attendanceData)}
-        className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white font-bold py-2 px-4 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg"
+        disabled={attendanceData.length === 0}
+        className={`${
+          attendanceData.length === 0
+            ? "bg-gray-600 cursor-not-allowed"
+            : "bg-white bg-opacity-20 hover:bg-opacity-30"
+        } text-white font-bold py-2 px-4 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg`}
       >
         Lihat Absensi
       </button>
@@ -167,92 +185,54 @@ function SubjectCard({ subject, attendanceData, onViewAttendance }) {
 
 export default function Dashboard() {
   const [hoveredCard, setHoveredCard] = useState(null);
-  const [students, setStudents] = useState([]);
-  const [teachers, setTeachers] = useState([]);
-  const [mutasiMasuk, setMutasiMasuk] = useState([]);
-  const [mutasiKeluar, setMutasiKeluar] = useState([]);
-  const [absenData, setAbsenData] = useState([]);
   const [dailyAttendanceData, setDailyAttendanceData] = useState({});
-  const [cardData, setCardData] = useState([]);
 
-  useEffect(() => {
-    const fetchAllData = async () => {
-      try {
-        const [
-          studentsRes,
-          teachersRes,
-          mutasiMasukRes,
-          mutasiKeluarRes,
-          absenRes,
-        ] = await Promise.all([
-          fetch("/api/siswa"),
-          fetch("/api/guru"),
-          fetch("/api/siswaMutasiMasuk"),
-          fetch("/api/siswaMutasiKeluar"),
-          fetch("/api/absen"),
-        ]);
+  // SWR configurations
+  const swrOptions = {
+    refreshInterval: 300000, // 5 minutes
+    revalidateOnFocus: false,
+    dedupingInterval: 180000, // 3 minutes
+  };
 
-        const studentsData = await studentsRes.json();
-        const teachersData = await teachersRes.json();
-        const mutasiMasukData = await mutasiMasukRes.json();
-        const mutasiKeluarData = await mutasiKeluarRes.json();
-        const absenData = await absenRes.json();
-
-        if (studentsData.success) setStudents(studentsData.data);
-        if (teachersData.success) setTeachers(teachersData.data);
-        if (mutasiMasukData.success) setMutasiMasuk(mutasiMasukData.data);
-        if (mutasiKeluarData.success) setMutasiKeluar(mutasiKeluarData.data);
-        if (absenData.success) {
-          setAbsenData(absenData.data);
-          const processedData = processAttendanceData(absenData.data);
-          setDailyAttendanceData(processedData);
-        }
-
-        // Set card data
-        setCardData([
-          {
-            title: "Jumlah Siswa",
-            value: studentsData.data.length || 0,
-            change: calculateChange(studentsData.data.length, "siswa"),
-          },
-          {
-            title: "Jumlah Guru",
-            value: teachersData.data.length || 0,
-            change: calculateChange(teachersData.data.length, "guru"),
-          },
-          {
-            title: "Mutasi Masuk",
-            value: mutasiMasukData.data.length || 0,
-            change: calculateChange(mutasiMasukData.data.length, "masuk"),
-          },
-          {
-            title: "Mutasi Keluar",
-            value: mutasiKeluarData.data.length || 0,
-            change: calculateChange(mutasiKeluarData.data.length, "keluar"),
-          },
-        ]);
-      } catch (error) {
-        console.error("Error fetching data:", error);
-        MySwal.fire({
-          icon: "error",
-          title: "Error",
-          text: "Gagal mengambil data",
-          toast: true,
-          position: "top-end",
-          showConfirmButton: false,
-          timer: 3000,
-          timerProgressBar: true,
-        });
+  // Data fetching with SWR
+  const { data: studentsData, error: studentsError } = useSWR(
+    "/api/siswa",
+    fetcher,
+    swrOptions
+  );
+  const { data: teachersData, error: teachersError } = useSWR(
+    "/api/guru",
+    fetcher,
+    swrOptions
+  );
+  const { data: mutasiMasukData, error: mutasiMasukError } = useSWR(
+    "/api/siswaMutasiMasuk",
+    fetcher,
+    swrOptions
+  );
+  const { data: mutasiKeluarData, error: mutasiKeluarError } = useSWR(
+    "/api/siswaMutasiKeluar",
+    fetcher,
+    swrOptions
+  );
+  const { data: absenData, error: absenError } = useSWR("/api/absen", fetcher, {
+    ...swrOptions,
+    onSuccess: (data) => {
+      if (data.success) {
+        const processedData = processAttendanceData(data.data);
+        setDailyAttendanceData(processedData);
       }
-    };
+    },
+  });
 
-    fetchAllData();
-    const intervalId = setInterval(fetchAllData, 5 * 60 * 1000);
-    return () => clearInterval(intervalId);
-  }, []);
+  const isLoading =
+    !studentsData ||
+    !teachersData ||
+    !mutasiMasukData ||
+    !mutasiKeluarData ||
+    !absenData;
 
   const calculateChange = (currentValue, type) => {
-    // Simulasi perubahan untuk demo
     const baseChanges = {
       siswa: 5,
       guru: 2,
@@ -262,11 +242,35 @@ export default function Dashboard() {
     return baseChanges[type] || 0;
   };
 
-  const processAttendanceData = (data) => {
-    const processedData = {};
+  // const processAttendanceData = (data) => {
+  //   const processedData = {};
+  //   mataPelajaran.forEach((subject) => {
+  //     processedData[subject] =
+  //       data?.filter(
+  //         (record) => record.mataPelajaran.toUpperCase() === subject
+  //       ) || [];
+  //   });
+  //   return processedData;
+  // };
 
+  const processAttendanceData = (data) => {
+    if (!data) return {};
+
+    // Get today's date (start of day)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Filter untuk absensi hari ini saja
+    const todayData = data.filter((record) => {
+      const recordDate = new Date(record.tanggal);
+      recordDate.setHours(0, 0, 0, 0);
+      return recordDate.getTime() === today.getTime();
+    });
+
+    // Process by mata pelajaran
+    const processedData = {};
     mataPelajaran.forEach((subject) => {
-      processedData[subject] = data.filter(
+      processedData[subject] = todayData.filter(
         (record) => record.mataPelajaran.toUpperCase() === subject
       );
     });
@@ -298,8 +302,12 @@ export default function Dashboard() {
       if (result.isConfirmed) {
         const selectedClass = result.value;
         const filteredData = attendanceData.filter(
-          (record) => record.kelas && record.kelas.startsWith(selectedClass)
+          (record) => record.kelas === selectedClass
         );
+        // Tampilkan semua kelas
+        // const filteredData = attendanceData.filter(
+        //   (record) => record.kelas && record.kelas.startsWith(selectedClass)
+        // );
 
         const attendanceTable = `
           <table style="width: 100%; text-align: left; border-collapse: collapse; color: white;">
@@ -377,7 +385,7 @@ export default function Dashboard() {
                     }
                     h1 { 
                       text-align: center;
-margin-bottom: 20px;
+                      margin-bottom: 20px;
                     }
                     table { 
                       width: 100%; 
@@ -424,15 +432,12 @@ margin-bottom: 20px;
                         <tr>
                           <td>${record.nama}</td>
                           <td>${record.kelas}</td>
-                          <td>${new Date(record.tanggal).toLocaleDateString(
-                            "id-ID",
-                            {
-                              weekday: "long",
-                              year: "numeric",
-                              month: "long",
-                              day: "numeric",
-                            }
-                          )}</td>
+<td>${new Date(record.tanggal).toLocaleDateString("id-ID", {
+                            weekday: "long",
+                            year: "numeric",
+                            month: "long",
+                            day: "numeric",
+                          })}</td>
                           <td>${record.keterangan}</td>
                         </tr>
                       `
@@ -463,6 +468,53 @@ margin-bottom: 20px;
     });
   };
 
+  // Prepare card data
+  const cardData = [
+    {
+      title: "Jumlah Siswa",
+      value: studentsData?.data?.length || 0,
+      change: calculateChange(studentsData?.data?.length, "siswa"),
+    },
+    {
+      title: "Jumlah Guru",
+      value: teachersData?.data?.length || 0,
+      change: calculateChange(teachersData?.data?.length, "guru"),
+    },
+    {
+      title: "Mutasi Masuk",
+      value: mutasiMasukData?.data?.length || 0,
+      change: calculateChange(mutasiMasukData?.data?.length, "masuk"),
+    },
+    {
+      title: "Mutasi Keluar",
+      value: mutasiKeluarData?.data?.length || 0,
+      change: calculateChange(mutasiKeluarData?.data?.length, "keluar"),
+    },
+  ];
+
+  // Loading
+  if (isLoading) {
+    return <LoadingIndicator />;
+  }
+  if (
+    studentsError ||
+    teachersError ||
+    mutasiMasukError ||
+    mutasiKeluarError ||
+    absenError
+  ) {
+    MySwal.fire({
+      icon: "error",
+      title: "Error",
+      text: "Gagal mengambil data",
+      toast: true,
+      position: "top-end",
+      showConfirmButton: false,
+      timer: 3000,
+      timerProgressBar: true,
+    });
+  }
+
   return (
     <div className="min-h-screen p-4 sm:p-6 md:p-8">
       <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-8">
@@ -492,7 +544,10 @@ margin-bottom: 20px;
         transition={{ delay: 0.5 }}
         className="mb-8"
       >
-        <Table students={students} absenData={absenData} />
+        <Table
+          students={studentsData?.data || []}
+          absenData={absenData?.data || []}
+        />
       </motion.div>
 
       <motion.h2
@@ -510,14 +565,20 @@ margin-bottom: 20px;
         transition={{ delay: 0.7 }}
         className="grid gap-6 md:grid-cols-2"
       >
-        {mataPelajaran.map((subject) => (
-          <SubjectCard
-            key={subject}
-            subject={subject}
-            attendanceData={dailyAttendanceData[subject] || []}
-            onViewAttendance={handleViewAttendance}
-          />
-        ))}
+        {!absenData
+          ? // Show skeletons while loading
+            [...Array(mataPelajaran.length)].map((_, index) => (
+              <SubjectCardSkeleton key={index} />
+            ))
+          : // Show actual data when loaded
+            mataPelajaran.map((subject) => (
+              <SubjectCard
+                key={subject}
+                subject={subject}
+                attendanceData={dailyAttendanceData[subject] || []}
+                onViewAttendance={handleViewAttendance}
+              />
+            ))}
       </motion.div>
     </div>
   );

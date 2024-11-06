@@ -125,7 +125,10 @@ const GuruPage = () => {
           <tbody>
             {filteredGuru.length === 0 ? (
               <tr>
-                <td colSpan={session?.user?.role === "admin" ? "7" : "6"} className={styles.noData}>
+                <td
+                  colSpan={session?.user?.role === "admin" ? "7" : "6"}
+                  className={styles.noData}
+                >
                   {searchTerm
                     ? "Tidak ada data yang sesuai dengan pencarian"
                     : "Belum ada data guru"}
@@ -146,9 +149,7 @@ const GuruPage = () => {
                       width={40}
                       height={40}
                       className={styles.userImage}
-                      onClick={() =>
-                        handleImagePreview(guru.image, guru.nama)
-                      }
+                      onClick={() => handleImagePreview(guru.image, guru.nama)}
                     />
                   </td>
                   <td>{guru.nama}</td>
