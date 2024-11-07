@@ -47,42 +47,48 @@ export default function UserPage() {
     setFilteredUsers(results);
   }, [searchTerm, users]);
 
-  const handleDelete = useCallback(
-    async (id) => {
+  const handleDelete = async (id) => {
+    try {
       const result = await MySwal.fire({
-        title: "Apakah Anda yakin?",
-        text: "Anda tidak akan dapat mengembalikan ini!",
-        icon: "warning",
+        title: 'Anda yakin?',
+        text: "Data yang dihapus tidak dapat dikembalikan!",
+        icon: 'warning',
         showCancelButton: true,
-        confirmButtonColor: "#3085d6",
-        cancelButtonColor: "#d33",
-        confirmButtonText: "Ya, hapus!",
-        cancelButtonText: "Batal",
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6',
+        confirmButtonText: 'Ya, hapus!',
+        cancelButtonText: 'Batal'
       });
-
+  
       if (result.isConfirmed) {
-        try {
-          const response = await fetch(`/api/user/${id}`, {
-            method: "DELETE",
-          });
-          const data = await response.json();
-          if (data.success) {
-            setUsers((prevUsers) => prevUsers.filter((u) => u._id !== id));
-            setFilteredUsers((prevFiltered) =>
-              prevFiltered.filter((u) => u._id !== id),
-            );
-            showSuccess("Pengguna berhasil dihapus!");
-          } else {
-            showError(data.error || "Gagal menghapus pengguna");
-          }
-        } catch (error) {
-          console.error("Error menghapus pengguna:", error);
-          showError("Error menghapus pengguna: " + error.message);
+        const response = await fetch(`/api/user/${id}`, {
+          method: 'DELETE'
+        });
+  
+        const data = await response.json();
+  
+        if (data.success) {
+          MySwal.fire(
+            'Terhapus!',
+            'Data pengguna berhasil dihapus.',
+            'success'
+          );
+          // Refresh data
+          router.refresh();
+        } else {
+          throw new Error(data.error);
         }
       }
-    },
-    [MySwal],
-  );
+    } catch (error) {
+      console.error('Error:', error);
+      MySwal.fire(
+        'Error!',
+        `Gagal menghapus pengguna: ${error.message}`,
+        'error'
+      );
+    }
+  };
+  
 
   const handleImageClick = (imageUrl, name) => {
     MySwal.fire({

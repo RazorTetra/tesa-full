@@ -141,7 +141,7 @@ const AddSiswaPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const validationErrors = validateForm();
-
+  
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
       MySwal.fire({
@@ -151,30 +151,54 @@ const AddSiswaPage = () => {
       });
       return;
     }
-
+  
     setIsSubmitting(true);
-
+  
     try {
       const response = await fetch("/api/siswa", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
       });
-
-      const data = await response.json();
-
-      if (data.success) {
-        await MySwal.fire({
-          icon: "success",
-          title: "Berhasil!",
-          text: "Data siswa berhasil ditambahkan",
-          timer: 2000,
-          showConfirmButton: false,
-        });
+  
+      const result = await response.json();
+  
+      if (result.success) {
+        // Tampilkan informasi login jika ada
+        if (result.user) {
+          await MySwal.fire({
+            icon: "success",
+            title: "Berhasil!",
+            html: `
+              <div>
+                <p>Data siswa berhasil ditambahkan</p>
+                <div style="margin-top: 20px; text-align: left; background-color: #f3f4f6; padding: 15px; border-radius: 8px;">
+                  <p style="font-weight: bold; color: #1f2937;">Informasi Login Siswa:</p>
+                  <p>Username: <span style="color: #2563eb;">${result.user.username}</span></p>
+                  <p>Password: <span style="color: #2563eb;">${result.user.password}</span></p>
+                  <p>Email: <span style="color: #2563eb;">${result.user.email}</span></p>
+                </div>
+                <p style="margin-top: 15px; color: #dc2626; font-size: 0.9em;">
+                  ⚠️ Mohon catat informasi login ini karena tidak akan ditampilkan lagi!
+                </p>
+              </div>
+            `,
+            confirmButtonText: "Saya sudah mencatat",
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+          });
+        } else {
+          await MySwal.fire({
+            icon: "success",
+            title: "Berhasil!",
+            text: "Data siswa berhasil ditambahkan",
+          });
+        }
+        
         router.push("/dashboard/siswa");
         router.refresh();
       } else {
-        throw new Error(data.error || "Gagal menambahkan data siswa");
+        throw new Error(result.error || "Gagal menambahkan data siswa");
       }
     } catch (error) {
       MySwal.fire({

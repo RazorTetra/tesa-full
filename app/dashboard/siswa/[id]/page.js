@@ -26,7 +26,7 @@ const EditSiswaPage = () => {
     status: "",
     kelas: "",
     image: "/noavatar.png",
-    imagePublicId: "", // Tambahkan ini untuk tracking gambar di Cloudinary
+    imagePublicId: "", 
   });
 
   useEffect(() => {
@@ -35,23 +35,17 @@ const EditSiswaPage = () => {
         const response = await fetch(`/api/siswa/${params.id}`);
         const data = await response.json();
 
-        console.log("Fetched student data:", data); // Tambahkan log
-
         if (data.success) {
-          const formattedData = {
+          setFormData({
             ...data.data,
             image: data.data.image || "/noavatar.png",
             imagePublicId: data.data.imagePublicId || "",
-          };
-
-          console.log("Formatted data:", formattedData); // Tambahkan log
-
-          setFormData(formattedData);
+          });
         } else {
           throw new Error(data.error || "Failed to fetch student data");
         }
       } catch (error) {
-        console.error("Fetch error:", error); // Tambahkan log
+        console.error("Fetch error:", error);
         MySwal.fire({
           icon: "error",
           title: "Error",
@@ -65,7 +59,6 @@ const EditSiswaPage = () => {
     fetchSiswa();
   }, [params.id]);
 
-  // Handle input changes
   const handleChange = useCallback((e) => {
     const { name, value } = e.target;
     setErrors((prev) => ({ ...prev, [name]: "" }));
@@ -81,102 +74,109 @@ const EditSiswaPage = () => {
   }, []);
 
   // Handle image upload
-  const handleImageUpload = useCallback(
-    async (e) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
+  const handleImageUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-      if (file.size > 2 * 1024 * 1024) {
-        MySwal.fire({
-          icon: "error",
-          title: "File Terlalu Besar",
-          text: "Ukuran file maksimal 2MB",
-        });
-        return;
-      }
+    if (file.size > 2 * 1024 * 1024) {
+      MySwal.fire({
+        icon: "error",
+        title: "Error",
+        text: "Ukuran file maksimal 2MB",
+      });
+      return;
+    }
 
-      if (!file.type.startsWith("image/")) {
-        MySwal.fire({
-          icon: "error",
-          title: "Format File Salah",
-          text: "Mohon upload file gambar (JPG, PNG, etc)",
-        });
-        return;
-      }
+    if (!file.type.startsWith("image/")) {
+      MySwal.fire({
+        icon: "error",
+        title: "Error",
+        text: "File harus berupa gambar",
+      });
+      return;
+    }
 
-      setIsImageUploading(true);
+    setIsImageUploading(true);
 
-      try {
-        // Hapus gambar lama jika ada dan bukan default
-        if (formData.imagePublicId) {
-          // Ubah kondisi ini
-          try {
-            console.log("Attempting to delete:", formData.imagePublicId); // Tambahkan log
-            const deleteResponse = await fetch("/api/upload/delete", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({
-                publicId: formData.imagePublicId,
-              }),
-            });
-
-            const deleteData = await deleteResponse.json(); // Tambahkan ini
-            console.log("Delete response:", deleteData); // Tambahkan ini
-
-            if (!deleteResponse.ok) {
-              console.warn("Failed to delete old image:", deleteData);
-            }
-          } catch (error) {
-            console.warn("Error deleting old image:", error);
-          }
-        }
-
-        // Upload gambar baru
-        const uploadFormData = new FormData();
-        uploadFormData.append("file", file);
-        uploadFormData.append("entityType", "siswa");
-        uploadFormData.append("entityId", params.id);
-
-        const response = await fetch("/api/upload", {
+    try {
+      // Delete old image if exists
+      if (formData.imagePublicId && formData.imagePublicId !== "tesa_skripsi/defaults/no-avatar") {
+        await fetch("/api/upload/delete", {
           method: "POST",
-          body: uploadFormData,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ publicId: formData.imagePublicId }),
         });
+      }
 
-        const data = await response.json();
+      const uploadFormData = new FormData();
+      uploadFormData.append("file", file);
+      uploadFormData.append("entityType", "users");
+      uploadFormData.append("entityId", params.id);
 
-        if (data.success) {
-          setFormData((prev) => ({
-            ...prev,
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: uploadFormData,
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        // Update both siswa and corresponding user data
+        const siswaResponse = await fetch(`/api/siswa/${params.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ...formData,
             image: data.fileName,
             imagePublicId: data.publicId,
+          }),
+        });
+
+        const siswaData = await siswaResponse.json();
+
+        if (siswaData.success) {
+          setFormData(prev => ({
+            ...prev,
+            image: data.fileName,
+            imagePublicId: data.publicId
           }));
-          setImageError(false);
+
+          // Update user data if siswa has a userId
+          if (siswaData.data.userId) {
+            await fetch(`/api/user/${siswaData.data.userId}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                image: data.fileName,
+                imagePublicId: data.publicId
+              }),
+            });
+          }
+
           MySwal.fire({
             icon: "success",
             title: "Berhasil",
-            text: "Foto berhasil diupload",
+            text: "Foto profil berhasil diperbarui",
             timer: 1500,
             showConfirmButton: false,
           });
-        } else {
-          throw new Error(data.error || "Gagal upload gambar");
         }
-      } catch (error) {
-        console.error("Upload error:", error);
-        MySwal.fire({
-          icon: "error",
-          title: "Gagal Upload",
-          text: error.message,
-        });
-        setImageError(true);
-      } finally {
-        setIsImageUploading(false);
+      } else {
+        throw new Error(data.error || "Gagal mengupload gambar");
       }
-    },
-    [params.id, formData.image, formData.imagePublicId]
-  );
+    } catch (error) {
+      console.error("Upload error:", error);
+      MySwal.fire({
+        icon: "error",
+        title: "Gagal Upload",
+        text: error.message,
+      });
+      setImageError(true);
+    } finally {
+      setIsImageUploading(false);
+    }
+  };
+
 
   // Form validation
   const validateForm = useCallback(() => {
@@ -237,15 +237,29 @@ const EditSiswaPage = () => {
       setIsSubmitting(true);
 
       try {
-        const response = await fetch(`/api/siswa/${params.id}`, {
+        // Update siswa data
+        const siswaResponse = await fetch(`/api/siswa/${params.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(formData),
         });
 
-        const data = await response.json();
+        const siswaData = await siswaResponse.json();
 
-        if (data.success) {
+        if (siswaData.success) {
+          // Update corresponding user data
+          if (siswaData.data.userId) {
+            await fetch(`/api/user/${siswaData.data.userId}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                nama: formData.nama,
+                image: formData.image,
+                imagePublicId: formData.imagePublicId
+              }),
+            });
+          }
+
           await MySwal.fire({
             icon: "success",
             title: "Berhasil!",
@@ -253,10 +267,11 @@ const EditSiswaPage = () => {
             timer: 2000,
             showConfirmButton: false,
           });
+          
           router.push("/dashboard/siswa");
           router.refresh();
         } else {
-          throw new Error(data.error || "Gagal memperbarui data siswa");
+          throw new Error(siswaData.error || "Gagal memperbarui data siswa");
         }
       } catch (error) {
         MySwal.fire({

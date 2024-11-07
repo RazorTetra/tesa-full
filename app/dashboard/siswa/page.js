@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Search, UserPlus } from "lucide-react";
+import { useSession } from "next-auth/react"
 import Swal from "sweetalert2";
 import withReactContent from "sweetalert2-react-content";
 import styles from "@/app/ui/dashboard/master/master.module.css";
