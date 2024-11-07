@@ -21,42 +21,47 @@ export default function Absen() {
   const { data: session } = useSession()
   const [loading, setLoading] = useState(false)
   const [studentData, setStudentData] = useState(null)
+  const [allStudents, setAllStudents] = useState([])
 
   useEffect(() => {
-    const fetchStudentData = async () => {
-      if (session?.user?.role === "user" && session?.user?.id) {
-        try {
+    const fetchData = async () => {
+      try {
+        if (session?.user?.role === "admin") {
+          // Fetch all students for admin
+          const response = await fetch('/api/siswa')
+          const data = await response.json()
+          if (data.success) {
+            setAllStudents(data.data)
+          }
+        } else if (session?.user?.role === "user" && session?.user?.id) {
+          // Fetch current student's data
           const response = await fetch(`/api/siswa/${session.user.id}`)
           const data = await response.json()
           if (data.success) {
             setStudentData(data.data)
-          } else {
-            MySwal.fire({
-              icon: 'error',
-              title: 'Error',
-              text: 'Gagal mengambil data siswa',
-            })
           }
-        } catch (error) {
-          console.error("Error fetching student data:", error)
-          MySwal.fire({
-            icon: 'error',
-            title: 'Error',
-            text: 'Gagal mengambil data siswa',
-          })
         }
+      } catch (error) {
+        console.error("Error fetching data:", error)
+        MySwal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: 'Gagal mengambil data',
+        })
       }
     }
 
-    fetchStudentData()
+    if (session) {
+      fetchData()
+    }
   }, [session])
 
   const handleAbsen = async (mapel) => {
     try {
       setLoading(true)
 
-      // Jika user biasa, gunakan data siswa yang sudah login
       if (session?.user?.role === "user") {
+        // User (student) flow
         if (!studentData) {
           throw new Error("Data siswa tidak ditemukan")
         }
@@ -88,40 +93,29 @@ export default function Absen() {
           mataPelajaran: mapel
         }
 
-        const response = await fetch('/api/absen', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(formData)
-        })
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`)
-        }
-
-        await MySwal.fire({
-          title: 'Berhasil!',
-          text: 'Absensi berhasil terkirim',
-          icon: 'success',
-          confirmButtonText: 'OK'
-        })
+        await submitAbsensi(formData)
 
       } else {
-        // Untuk admin, gunakan flow yang sudah ada
-        const { value: namaValue } = await MySwal.fire({
-          title: `Absensi ${mapel}`,
-          input: 'text',
-          inputLabel: 'Nama',
-          inputPlaceholder: 'Masukkan nama',
+        // Admin flow
+        const { value: selectedStudentId } = await MySwal.fire({
+          title: `Pilih Siswa untuk ${mapel}`,
+          input: 'select',
+          inputOptions: allStudents.reduce((acc, student) => {
+            acc[student._id] = `${student.nama} - Kelas ${student.kelas}`
+            return acc
+          }, {}),
+          inputPlaceholder: 'Pilih Siswa',
           showCancelButton: true,
           confirmButtonText: 'Lanjut',
           cancelButtonText: 'Batal'
         })
-        if (!namaValue) {
+
+        if (!selectedStudentId) {
           setLoading(false)
           return
         }
+
+        const selectedStudent = allStudents.find(s => s._id === selectedStudentId)
 
         const { value: tanggalValue } = await MySwal.fire({
           title: `Tanggal Absensi`,
@@ -132,25 +126,8 @@ export default function Absen() {
           confirmButtonText: 'Lanjut',
           cancelButtonText: 'Batal'
         })
-        if (!tanggalValue) {
-          setLoading(false)
-          return
-        }
 
-        const { value: kelasValue } = await MySwal.fire({
-          title: `Pilih Kelas`,
-          input: 'select',
-          inputOptions: {
-            VII: 'VII',
-            VIII: 'VIII',
-            IX: 'IX'
-          },
-          inputPlaceholder: 'Pilih Kelas',
-          showCancelButton: true,
-          confirmButtonText: 'Lanjut',
-          cancelButtonText: 'Batal'
-        })
-        if (!kelasValue) {
+        if (!tanggalValue) {
           setLoading(false)
           return
         }
@@ -165,43 +142,27 @@ export default function Absen() {
           },
           inputPlaceholder: 'Pilih Keterangan',
           showCancelButton: true,
-          confirmButtonText: 'Lanjut',
+          confirmButtonText: 'Submit',
           cancelButtonText: 'Batal'
         })
+
         if (!keteranganValue) {
           setLoading(false)
           return
         }
 
         const formData = {
-          nama: namaValue,
+          nama: selectedStudent.nama,
           tanggal: tanggalValue,
-          kelas: kelasValue,
+          kelas: selectedStudent.kelas,
           keterangan: keteranganValue,
           mataPelajaran: mapel
         }
 
-        const response = await fetch('/api/absen', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(formData)
-        })
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`)
-        }
-
-        await MySwal.fire({
-          title: 'Berhasil!',
-          text: 'Absensi berhasil terkirim',
-          icon: 'success',
-          confirmButtonText: 'OK'
-        })
+        await submitAbsensi(formData)
       }
 
-      router.push('/dashboard/absen')
+      router.refresh()
     } catch (error) {
       console.error('Error:', error)
       await MySwal.fire({
@@ -215,7 +176,27 @@ export default function Absen() {
     }
   }
 
-  // Tampilkan informasi siswa jika user biasa
+  const submitAbsensi = async (formData) => {
+    const response = await fetch('/api/absen', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(formData)
+    })
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`)
+    }
+
+    await MySwal.fire({
+      title: 'Berhasil!',
+      text: 'Absensi berhasil terkirim',
+      icon: 'success',
+      confirmButtonText: 'OK'
+    })
+  }
+
   const renderStudentInfo = () => {
     if (session?.user?.role === "user" && studentData) {
       return (

@@ -11,55 +11,51 @@ const authOptions = {
     CredentialsProvider({
       name: "Credentials",
       credentials: {
-        username: { label: "Username", type: "text" },
-        password: { label: "Password", type: "password" }
+        username: { 
+          label: "Username", 
+          type: "text",
+          placeholder: "Masukkan username Anda" 
+        },
+        password: { 
+          label: "Password", 
+          type: "password",
+          placeholder: "Masukkan password Anda"
+        }
       },
       async authorize(credentials) {
+        if (!credentials?.username || !credentials?.password) {
+          throw new Error("Username dan password harus diisi");
+        }
+
         try {
           await connectDB();
           
-          // Tambahkan log untuk debug
-          console.log("Attempting login with:", {
-            username: credentials.username,
-            passwordLength: credentials.password?.length
-          });
-          
-          const user = await User.findOne({ username: credentials.username });
+          const user = await User.findOne({ username: credentials.username })
+            .select('+password')
+            .lean();
           
           if (!user) {
-            console.log("User not found:", credentials.username);
             throw new Error("User tidak ditemukan");
           }
 
-          // Log untuk memastikan password yang diinput dan hash di DB
-          console.log("Comparing passwords:", {
-            inputPassword: credentials.password,
-            storedHash: user.password
-          });
-          
           const isPasswordMatch = await bcrypt.compare(
-            credentials.password.toString(), // Pastikan password dalam bentuk string
+            credentials.password,
             user.password
           );
           
           if (!isPasswordMatch) {
-            console.log("Password mismatch for user:", credentials.username);
             throw new Error("Password salah");
           }
 
-          // If user is a regular user (siswa), get the siswa data
           let siswaData = null;
           if (user.pengguna === "user") {
-            siswaData = await Siswa.findOne({ userId: user._id });
-            if (!siswaData) {
-              console.log("Siswa data not found for user:", user._id);
-              // Ubah ini agar tidak menghentikan login jika data siswa tidak ditemukan
-              console.warn("Data siswa tidak ditemukan untuk user:", user._id);
-            }
+            siswaData = await Siswa.findOne({ userId: user._id }).lean();
           }
 
-          // Return user data for session
-          const userData = {
+          // Remove sensitive data
+          delete user.password;
+          
+          return {
             id: siswaData ? siswaData._id : user._id,
             name: user.nama,
             email: user.email,
@@ -68,19 +64,15 @@ const authOptions = {
             userId: user._id
           };
 
-          console.log("Login successful, returning user data:", userData);
-          return userData;
-
         } catch (error) {
-          console.error("Auth error:", error);
-          throw new Error(error.message);
+          throw new Error(error.message || "Terjadi kesalahan saat autentikasi");
         }
       }
     })
   ],
   callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
+    async jwt({ token, user, account }) {
+      if (user && account) {
         token.role = user.role;
         token.id = user.id;
         token.userId = user.userId;
@@ -99,13 +91,29 @@ const authOptions = {
   pages: {
     signIn: '/login',
     error: '/login',
+    signOut: '/login'
   },
   session: {
     strategy: "jwt",
     maxAge: 24 * 60 * 60, // 24 hours
+    updateAge: 24 * 60 * 60, // 24 hours
   },
-  secret: process.env.NEXTAUTH_SECRET,
-  debug: true, // Tambahkan ini untuk debugging
+  jwt: {
+    secret: process.env.NEXTAUTH_SECRET,
+    maxAge: 24 * 60 * 60, // 24 hours
+  },
+  cookies: {
+    sessionToken: {
+      name: `next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: 'lax',
+        path: '/',
+        secure: process.env.NODE_ENV === 'production'
+      }
+    }
+  },
+  debug: process.env.NODE_ENV === 'development'
 };
 
 const handler = NextAuth(authOptions);

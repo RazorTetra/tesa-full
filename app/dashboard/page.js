@@ -1,15 +1,18 @@
+// app/dashboard/page.js
 "use client";
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useSession } from "next-auth/react";
+import useSWR from "swr";
 import Swal from "sweetalert2";
 import withReactContent from "sweetalert2-react-content";
-import useSWR from "swr";
 import LoadingIndicator from "../components/LoadingIndicator";
 import { SubjectCardSkeleton } from "../components/SubjectCardSkeleton";
 
 const MySwal = withReactContent(Swal);
 
+// =============== Constants ===============
 const mataPelajaran = [
   "MATEMATIKA",
   "IPA",
@@ -27,16 +30,87 @@ const mataPelajaran = [
   "PROJECT P5",
 ];
 
-// Fetcher function for SWR
 const fetcher = async (url) => {
   const res = await fetch(url);
   if (!res.ok) throw new Error("Failed to fetch data");
   return res.json();
 };
 
+// =============== Helper Functions ===============
+const normalizeString = (str) => str.trim().toUpperCase();
+
+// Helper untuk mendapatkan tanggal lokal GMT+8
+const getLocalDate = (date) => {
+  const localDate = new Date(date);
+  // Sesuaikan ke GMT+8
+  localDate.setHours(localDate.getHours() + 8);
+  return localDate;
+};
+
+// Helper untuk format tanggal ke midnight GMT+8
+const setLocalMidnight = (date) => {
+  const localDate = getLocalDate(date);
+  localDate.setHours(0, 0, 0, 0);
+  return localDate;
+};
+
+const processAttendanceData = (data) => {
+  if (!data) return {};
+
+  try {
+    // Gunakan waktu lokal GMT+8
+    const today = new Date();
+    const localToday = setLocalMidnight(today);
+
+    const todayData = data.filter((record) => {
+      // Pastikan tanggal valid
+      if (!record.tanggal) return false;
+
+      // Konversi tanggal record ke GMT+8
+      const recordDate = setLocalMidnight(record.tanggal);
+      if (isNaN(recordDate.getTime())) return false;
+
+      return recordDate.getTime() === localToday.getTime();
+    });
+
+    const processedData = {};
+    mataPelajaran.forEach((subject) => {
+      processedData[subject] = todayData.filter(
+        (record) =>
+          normalizeString(record.mataPelajaran) === normalizeString(subject)
+      );
+    });
+
+    return processedData;
+  } catch (error) {
+    console.error("Error processing attendance data:", error);
+    return {};
+  }
+};
+
+const calculateChange = (currentValue, type) => {
+  const baseChanges = {
+    siswa: 5,
+    guru: 2,
+    masuk: -3,
+    keluar: 4,
+  };
+  return baseChanges[type] || 0;
+};
+
+const formatLocalDate = (date) => {
+  const localDate = getLocalDate(date);
+  return localDate.toLocaleDateString("id-ID", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+};
+
+// =============== Components ===============
 function Card({ title, value, change, isHovered }) {
   const isPositive = change >= 0;
-
   return (
     <motion.div
       className={`p-6 rounded-2xl shadow-lg transition-all duration-300 bg-gradient-to-br ${
@@ -147,9 +221,10 @@ function Table({ students, absenData }) {
 }
 
 function SubjectCard({ subject, attendanceData, onViewAttendance }) {
-  const presentCount = attendanceData.filter(
-    (record) => record.keterangan.toLowerCase() === "hadir"
-  ).length;
+  const presentCount =
+    attendanceData?.filter(
+      (record) => record.keterangan?.toLowerCase() === "hadir"
+    )?.length || 0;
 
   return (
     <motion.div
@@ -162,17 +237,16 @@ function SubjectCard({ subject, attendanceData, onViewAttendance }) {
     >
       <div>
         <h3 className="text-2xl font-semibold mb-2 text-white">{subject}</h3>
-        {attendanceData.length === 0 ? (
-          <p className="text-gray-400">Belum ada absensi hari ini</p>
-        ) : (
-          <p className="text-gray-200">Jumlah Hadir: {presentCount}</p>
-        )}
+        <p className="text-gray-200">
+          {attendanceData?.length > 0
+            ? `Jumlah Hadir: ${presentCount}`
+            : "Belum ada absensi hari ini"}
+        </p>
       </div>
       <button
         onClick={() => onViewAttendance(subject, attendanceData)}
-        disabled={attendanceData.length === 0}
         className={`${
-          attendanceData.length === 0
+          attendanceData?.length === 0
             ? "bg-gray-600 cursor-not-allowed"
             : "bg-white bg-opacity-20 hover:bg-opacity-30"
         } text-white font-bold py-2 px-4 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg`}
@@ -183,18 +257,22 @@ function SubjectCard({ subject, attendanceData, onViewAttendance }) {
   );
 }
 
+// =============== Main Component ===============
 export default function Dashboard() {
+  const { data: session } = useSession();
+  const isAdmin = session?.user?.role === "admin";
+
   const [hoveredCard, setHoveredCard] = useState(null);
   const [dailyAttendanceData, setDailyAttendanceData] = useState({});
 
-  // SWR configurations
+  // SWR Configuration
   const swrOptions = {
-    refreshInterval: 300000, // 5 minutes
+    refreshInterval: 300000,
     revalidateOnFocus: false,
-    dedupingInterval: 180000, // 3 minutes
+    dedupingInterval: 180000,
   };
 
-  // Data fetching with SWR
+  // Data Fetching
   const { data: studentsData, error: studentsError } = useSWR(
     "/api/siswa",
     fetcher,
@@ -232,52 +310,31 @@ export default function Dashboard() {
     !mutasiKeluarData ||
     !absenData;
 
-  const calculateChange = (currentValue, type) => {
-    const baseChanges = {
-      siswa: 5,
-      guru: 2,
-      masuk: -3,
-      keluar: 4,
-    };
-    return baseChanges[type] || 0;
-  };
-
-  // const processAttendanceData = (data) => {
-  //   const processedData = {};
-  //   mataPelajaran.forEach((subject) => {
-  //     processedData[subject] =
-  //       data?.filter(
-  //         (record) => record.mataPelajaran.toUpperCase() === subject
-  //       ) || [];
-  //   });
-  //   return processedData;
-  // };
-
-  const processAttendanceData = (data) => {
-    if (!data) return {};
-
-    // Get today's date (start of day)
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Filter untuk absensi hari ini saja
-    const todayData = data.filter((record) => {
-      const recordDate = new Date(record.tanggal);
-      recordDate.setHours(0, 0, 0, 0);
-      return recordDate.getTime() === today.getTime();
+  // Error Handling
+  if (
+    studentsError ||
+    teachersError ||
+    mutasiMasukError ||
+    mutasiKeluarError ||
+    absenError
+  ) {
+    MySwal.fire({
+      icon: "error",
+      title: "Error",
+      text: "Gagal mengambil data",
+      toast: true,
+      position: "top-end",
+      showConfirmButton: false,
+      timer: 3000,
+      timerProgressBar: true,
     });
+  }
 
-    // Process by mata pelajaran
-    const processedData = {};
-    mataPelajaran.forEach((subject) => {
-      processedData[subject] = todayData.filter(
-        (record) => record.mataPelajaran.toUpperCase() === subject
-      );
-    });
+  if (isLoading) {
+    return <LoadingIndicator />;
+  }
 
-    return processedData;
-  };
-
+  // Attendance Handling
   const handleViewAttendance = (subject, attendanceData) => {
     MySwal.fire({
       title: "Pilih Kelas",
@@ -300,23 +357,144 @@ export default function Dashboard() {
       },
     }).then((result) => {
       if (result.isConfirmed) {
-        const selectedClass = result.value;
-        const filteredData = attendanceData.filter(
-          (record) => record.kelas === selectedClass
-        );
-        // Tampilkan semua kelas
-        // const filteredData = attendanceData.filter(
-        //   (record) => record.kelas && record.kelas.startsWith(selectedClass)
-        // );
+        showAttendanceDetails(subject, result.value, attendanceData);
+      }
+    });
+  };
 
-        const attendanceTable = `
-          <table style="width: 100%; text-align: left; border-collapse: collapse; color: white;">
+  const showAttendanceDetails = (subject, selectedClass, attendanceData) => {
+    // Filter untuk mendapatkan semua data kelas yang dimulai dengan VII, VIII, atau IX
+    const filteredData = attendanceData.filter((record) => {
+      return record.kelas.startsWith(selectedClass);
+    });
+
+    console.log("Selected Class:", selectedClass);
+    console.log("Filtered Data:", filteredData);
+    console.log("All Data:", attendanceData);
+
+    const attendanceTable = generateAttendanceTable(filteredData);
+
+    MySwal.fire({
+      title: `<span style="color: white;">Absensi - ${subject} (Kelas ${selectedClass})</span>`,
+      html:
+        attendanceTable ||
+        '<p style="color: white;">Tidak ada data absensi untuk kelas ini</p>',
+      width: "80%",
+      background: "linear-gradient(to bottom right, #374151, #374164)",
+      color: "white",
+      showCloseButton: true,
+      showCancelButton: true,
+      cancelButtonText: "Tutup",
+      confirmButtonText: isAdmin ? "Cetak" : "Tutup",
+      showConfirmButton: isAdmin,
+      customClass: {
+        container: "rounded-lg shadow-2xl",
+        popup: "rounded-lg",
+        header: "border-b border-blue-300",
+        closeButton: "text-white hover:text-gray-300",
+        content: "p-0",
+        confirmButton:
+          "bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded",
+        cancelButton:
+          "bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded",
+      },
+    }).then((result) => {
+      // Tambahkan handler untuk tombol cetak
+      if (result.isConfirmed && isAdmin) {
+        handlePrint(subject, selectedClass, filteredData);
+      }
+    });
+  };
+
+  const generateAttendanceTable = (filteredData) => {
+    return `
+      <table style="width: 100%; text-align: left; border-collapse: collapse; color: white;">
+        <thead>
+          <tr>
+            <th style="border-bottom: 1px solid #4B5563; padding: 12px;">Nama</th>
+            <th style="border-bottom: 1px solid #4B5563; padding: 12px;">Kelas</th>
+            <th style="border-bottom: 1px solid #4B5563; padding: 12px;">Tanggal</th>
+            <th style="border-bottom: 1px solid #4B5563; padding: 12px;">Keterangan</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filteredData
+            .map(
+              (record) => `
+            <tr>
+              <td style="padding: 12px; border-bottom: 1px solid #374151;">${
+                record.nama
+              }</td>
+              <td style="padding: 12px; border-bottom: 1px solid #374151;">${
+                record.kelas
+              }</td>
+              <td style="padding: 12px; border-bottom: 1px solid #374151;">
+                ${formatLocalDate(record.tanggal)}
+              </td>
+              <td style="padding: 12px; border-bottom: 1px solid #374151;">${
+                record.keterangan
+              }</td>
+            </tr>
+          `
+            )
+            .join("")}
+        </tbody>
+      </table>
+    `;
+  };
+
+  const handlePrint = (subject, selectedClass, filteredData) => {
+    const now = getLocalDate(new Date());
+    const printWindow = window.open("", "_blank");
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Cetak Absensi ${subject} - Kelas ${selectedClass}</title>
+          <style>
+            body { 
+              font-family: Arial, sans-serif;
+              padding: 20px;
+            }
+            h1 { 
+              text-align: center;
+              margin-bottom: 20px;
+            }
+            table { 
+              width: 100%; 
+              border-collapse: collapse; 
+              margin-bottom: 20px;
+            }
+            th, td { 
+              border: 1px solid #ddd; 
+              padding: 8px; 
+              text-align: left; 
+            }
+            th { 
+              background-color: #f2f2f2;
+              font-weight: bold;
+            }
+            .print-date {
+              text-align: right;
+              margin-bottom: 20px;
+            }
+            @media print {
+              table { page-break-inside: auto }
+              tr { page-break-inside: avoid; page-break-after: auto }
+            }
+          </style>
+        </head>
+        <body>
+          <h1>Absensi - ${subject} (Kelas ${selectedClass})</h1>
+          <div class="print-date">
+            Dicetak pada: ${now.toLocaleString("id-ID")}
+          </div>
+          <table>
             <thead>
               <tr>
-                <th style="border-bottom: 1px solid #4B5563; padding: 12px;">Nama</th>
-                <th style="border-bottom: 1px solid #4B5563; padding: 12px;">Kelas</th>
-                <th style="border-bottom: 1px solid #4B5563; padding: 12px;">Tanggal</th>
-                <th style="border-bottom: 1px solid #4B5563; padding: 12px;">Keterangan</th>
+                <th>Nama</th>
+                <th>Kelas</th>
+                <th>Tanggal</th>
+                <th>Keterangan</th>
               </tr>
             </thead>
             <tbody>
@@ -324,151 +502,36 @@ export default function Dashboard() {
                 .map(
                   (record) => `
                 <tr>
-                  <td style="padding: 12px; border-bottom: 1px solid #374151;">${
-                    record.nama
-                  }</td>
-                  <td style="padding: 12px; border-bottom: 1px solid #374151;">${
-                    record.kelas
-                  }</td>
-                  <td style="padding: 12px; border-bottom: 1px solid #374151;">
-                    ${new Date(record.tanggal).toLocaleDateString("id-ID", {
-                      weekday: "long",
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                    })}
-                  </td>
-                  <td style="padding: 12px; border-bottom: 1px solid #374151;">${
-                    record.keterangan
-                  }</td>
+                  <td>${record.nama}</td>
+                  <td>${record.kelas}</td>
+                  <td>${formatLocalDate(record.tanggal)}</td>
+                  <td>${record.keterangan}</td>
                 </tr>
               `
                 )
                 .join("")}
             </tbody>
           </table>
-        `;
-
-        MySwal.fire({
-          title: `<span style="color: white;">Absensi - ${subject} (Kelas ${selectedClass})</span>`,
-          html: attendanceTable,
-          width: "80%",
-          background: "linear-gradient(to bottom right, #374151, #374164)",
-          color: "white",
-          confirmButtonColor: "#3B82F6",
-          showCloseButton: true,
-          showCancelButton: true,
-          cancelButtonText: "Tutup",
-          confirmButtonText: "Cetak",
-          customClass: {
-            container: "rounded-lg shadow-2xl",
-            popup: "rounded-lg",
-            header: "border-b border-blue-300",
-            closeButton: "text-white hover:text-gray-300",
-            content: "p-0",
-            confirmButton:
-              "bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded",
-            cancelButton:
-              "bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded",
-          },
-        }).then((printResult) => {
-          if (printResult.isConfirmed) {
-            const printWindow = window.open("", "_blank");
-            printWindow.document.write(`
-              <html>
-                <head>
-                  <title>Cetak Absensi ${subject} - Kelas ${selectedClass}</title>
-                  <style>
-                    body { 
-                      font-family: Arial, sans-serif;
-                      padding: 20px;
-                    }
-                    h1 { 
-                      text-align: center;
-                      margin-bottom: 20px;
-                    }
-                    table { 
-                      width: 100%; 
-                      border-collapse: collapse; 
-                      margin-bottom: 20px;
-                    }
-                    th, td { 
-                      border: 1px solid #ddd; 
-                      padding: 8px; 
-                      text-align: left; 
-                    }
-                    th { 
-                      background-color: #f2f2f2;
-                      font-weight: bold;
-                    }
-                    .print-date {
-                      text-align: right;
-                      margin-bottom: 20px;
-                    }
-                    @media print {
-                      table { page-break-inside: auto }
-                      tr { page-break-inside: avoid; page-break-after: auto }
-                    }
-                  </style>
-                </head>
-                <body>
-                  <h1>Absensi - ${subject} (Kelas ${selectedClass})</h1>
-                  <div class="print-date">
-                    Dicetak pada: ${new Date().toLocaleString("id-ID")}
-                  </div>
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Nama</th>
-                        <th>Kelas</th>
-                        <th>Tanggal</th>
-                        <th>Keterangan</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      ${filteredData
-                        .map(
-                          (record) => `
-                        <tr>
-                          <td>${record.nama}</td>
-                          <td>${record.kelas}</td>
-<td>${new Date(record.tanggal).toLocaleDateString("id-ID", {
-                            weekday: "long",
-                            year: "numeric",
-                            month: "long",
-                            day: "numeric",
-                          })}</td>
-                          <td>${record.keterangan}</td>
-                        </tr>
-                      `
-                        )
-                        .join("")}
-                    </tbody>
-                  </table>
-                  <div style="margin-top: 50px;">
-                    <p style="text-align: right;">
-                      Tompaso, ${new Date().toLocaleDateString("id-ID", {
-                        day: "numeric",
-                        month: "long",
-                        year: "numeric",
-                      })}
-                      <br><br><br><br>
-                      _____________________<br>
-                      Kepala Sekolah
-                    </p>
-                  </div>
-                </body>
-              </html>
-            `);
-            printWindow.document.close();
-            printWindow.print();
-          }
-        });
-      }
-    });
+          <div style="margin-top: 50px;">
+            <p style="text-align: right;">
+              Tompaso, ${now.toLocaleDateString("id-ID", {
+                day: "numeric",
+                month: "long",
+                year: "numeric",
+              })}
+              <br><br><br><br>
+              _____________________<br>
+              Kepala Sekolah
+            </p>
+          </div>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
   };
 
-  // Prepare card data
+  // Data untuk Card Dashboard
   const cardData = [
     {
       title: "Jumlah Siswa",
@@ -492,31 +555,10 @@ export default function Dashboard() {
     },
   ];
 
-  // Loading
-  if (isLoading) {
-    return <LoadingIndicator />;
-  }
-  if (
-    studentsError ||
-    teachersError ||
-    mutasiMasukError ||
-    mutasiKeluarError ||
-    absenError
-  ) {
-    MySwal.fire({
-      icon: "error",
-      title: "Error",
-      text: "Gagal mengambil data",
-      toast: true,
-      position: "top-end",
-      showConfirmButton: false,
-      timer: 3000,
-      timerProgressBar: true,
-    });
-  }
-
+  // Render Utama
   return (
     <div className="min-h-screen p-4 sm:p-6 md:p-8">
+      {/* Summary Cards */}
       <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 mb-8">
         <AnimatePresence>
           {cardData.map((data, index) => (
@@ -538,6 +580,7 @@ export default function Dashboard() {
         </AnimatePresence>
       </div>
 
+      {/* Students Table */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -550,6 +593,7 @@ export default function Dashboard() {
         />
       </motion.div>
 
+      {/* Daily Attendance Section */}
       <motion.h2
         className="text-3xl font-bold mb-6 text-white text-center"
         initial={{ opacity: 0, y: -20 }}
@@ -566,12 +610,10 @@ export default function Dashboard() {
         className="grid gap-6 md:grid-cols-2"
       >
         {!absenData
-          ? // Show skeletons while loading
-            [...Array(mataPelajaran.length)].map((_, index) => (
+          ? [...Array(mataPelajaran.length)].map((_, index) => (
               <SubjectCardSkeleton key={index} />
             ))
-          : // Show actual data when loaded
-            mataPelajaran.map((subject) => (
+          : mataPelajaran.map((subject) => (
               <SubjectCard
                 key={subject}
                 subject={subject}

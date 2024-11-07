@@ -3,8 +3,9 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { signOut } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 import {
   MdDashboard,
   MdSupervisedUserCircle,
@@ -30,13 +31,27 @@ const menuItems = [
     title: "Manajemen",
     icon: <MdSupervisedUserCircle />,
     subItems: [
-      { title: "Users", path: "/dashboard/users", icon: <MdPeople /> },
-      { title: "Siswa", path: "/dashboard/siswa", icon: <MdSchool /> },
-      { title: "Guru", path: "/dashboard/guru", icon: <MdPeople /> },
+      { 
+        title: "Users", 
+        path: "/dashboard/users", 
+        icon: <MdPeople />,
+        adminOnly: true 
+      },
+      { 
+        title: "Siswa", 
+        path: "/dashboard/siswa", 
+        icon: <MdSchool /> 
+      },
+      { 
+        title: "Guru", 
+        path: "/dashboard/guru", 
+        icon: <MdPeople /> 
+      },
       {
         title: "Mutasi Siswa",
         path: "/dashboard/mutasi",
         icon: <MdAssignment />,
+        adminOnly: true
       },
     ],
   },
@@ -48,11 +63,19 @@ const menuItems = [
 ];
 
 export default function Navbar() {
+  const { data: session } = useSession();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(null);
   const pathname = usePathname();
   const router = useRouter();
+
+  // Filter submenu items berdasarkan role
+  const getFilteredSubItems = (subItems) => {
+    return subItems.filter(item => 
+      !item.adminOnly || session?.user?.role === "admin"
+    );
+  };
 
   useEffect(() => {
     const handleScroll = () => {
@@ -94,12 +117,13 @@ export default function Navbar() {
     <nav className={`${styles.navbar} ${isScrolled ? styles.hidden : ""}`}>
       <div className={styles.left}>
         <Link href="/dashboard" className={styles.logoLink}>
-          <img
+          <Image
             src="/logo-smp-advent.png"
             alt="School Logo"
             width={40}
             height={40}
             className={styles.logo}
+            priority
           />
           <span className={styles.schoolName}>SMP ADVENT TOMPASO</span>
         </Link>
@@ -128,7 +152,7 @@ export default function Navbar() {
                 </button>
                 {openDropdown === index && (
                   <div className={styles.dropdown}>
-                    {item.subItems.map((subItem) => (
+                    {getFilteredSubItems(item.subItems).map((subItem) => (
                       <Link
                         key={subItem.path}
                         href={subItem.path}

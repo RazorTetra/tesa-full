@@ -3,16 +3,10 @@ const mongoose = require("mongoose");
 
 const connectDB = async () => {
   try {
-    // Pastikan nama database ada dalam URI setelah hostname dan sebelum parameter
-    const MONGODB_URI = "mongodb+srv://admin:ZfwEeovOxuIIBzNT@cluster0.tlq0c.mongodb.net/tesa_skripsi?retryWrites=true&w=majority"
-    ;
+    const MONGODB_URI = process.env.MONGODB_URI;
     
-    const connection = await mongoose.connect(MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
+    const connection = await mongoose.connect(MONGODB_URI);
     
-    // Log nama database untuk memverifikasi koneksi
     console.log(`MongoDB Atlas connected successfully to database: ${connection.connection.db.databaseName}`);
   } catch (error) {
     console.error("MongoDB connection error:", error);

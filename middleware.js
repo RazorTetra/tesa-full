@@ -5,7 +5,9 @@ import { NextResponse } from "next/server";
 export default withAuth(
   function middleware(req) {
     const token = req.nextauth.token;
-    const isAdminRoute = req.nextUrl.pathname.startsWith("/dashboard/admin");
+    const isAdminRoute = req.nextUrl.pathname.startsWith("/dashboard/admin") || 
+                        req.nextUrl.pathname.startsWith("/dashboard/users") ||
+                        req.nextUrl.pathname.startsWith("/dashboard/mutasi");
     const isStudentRoute = req.nextUrl.pathname.startsWith("/dashboard/siswa");
     
     // Jika mencoba mengakses route admin tapi bukan admin

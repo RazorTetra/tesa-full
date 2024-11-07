@@ -11,6 +11,15 @@ const nextConfig = {
       },
     ],
   },
+  webpack: (config, { }) => {
+    // Mengatasi deprecated punycode warning
+    config.resolve.fallback = {
+      ...config.resolve.fallback,
+      "punycode": false,
+    };
+
+    return config;
+  },
 };
 
 module.exports = nextConfig;
