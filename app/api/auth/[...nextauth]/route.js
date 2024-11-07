@@ -11,29 +11,29 @@ const authOptions = {
     CredentialsProvider({
       name: "Credentials",
       credentials: {
-        username: { 
-          label: "Username", 
+        username: {
+          label: "Username",
           type: "text",
-          placeholder: "Masukkan username Anda" 
+          placeholder: "Masukkan username Anda",
         },
-        password: { 
-          label: "Password", 
+        password: {
+          label: "Password",
           type: "password",
-          placeholder: "Masukkan password Anda"
-        }
+          placeholder: "Masukkan password Anda",
+        },
       },
-      async authorize(credentials) {
+      async authorize(credentials, req) {
         if (!credentials?.username || !credentials?.password) {
           throw new Error("Username dan password harus diisi");
         }
 
         try {
           await connectDB();
-          
+
           const user = await User.findOne({ username: credentials.username })
-            .select('+password')
+            .select("+password")
             .lean();
-          
+
           if (!user) {
             throw new Error("User tidak ditemukan");
           }
@@ -42,7 +42,7 @@ const authOptions = {
             credentials.password,
             user.password
           );
-          
+
           if (!isPasswordMatch) {
             throw new Error("Password salah");
           }
@@ -52,27 +52,31 @@ const authOptions = {
             siswaData = await Siswa.findOne({ userId: user._id }).lean();
           }
 
-          // Remove sensitive data
           delete user.password;
-          
+
           return {
             id: siswaData ? siswaData._id : user._id,
             name: user.nama,
             email: user.email,
             role: user.pengguna,
             image: user.image,
-            userId: user._id
+            userId: user._id,
           };
-
         } catch (error) {
-          throw new Error(error.message || "Terjadi kesalahan saat autentikasi");
+          console.error("Auth Error:", error);
+          return null;
         }
-      }
-    })
+      },
+    }),
   ],
+  pages: {
+    signIn: "/login",
+    error: "/login",
+    signOut: "/login",
+  },
   callbacks: {
-    async jwt({ token, user, account }) {
-      if (user && account) {
+    async jwt({ token, user }) {
+      if (user) {
         token.role = user.role;
         token.id = user.id;
         token.userId = user.userId;
@@ -86,34 +90,14 @@ const authOptions = {
         session.user.userId = token.userId;
       }
       return session;
-    }
-  },
-  pages: {
-    signIn: '/login',
-    error: '/login',
-    signOut: '/login'
+    },
   },
   session: {
     strategy: "jwt",
-    maxAge: 24 * 60 * 60, // 24 hours
-    updateAge: 24 * 60 * 60, // 24 hours
+    maxAge: 24 * 60 * 60,
   },
-  jwt: {
-    secret: process.env.NEXTAUTH_SECRET,
-    maxAge: 24 * 60 * 60, // 24 hours
-  },
-  cookies: {
-    sessionToken: {
-      name: `next-auth.session-token`,
-      options: {
-        httpOnly: true,
-        sameSite: 'lax',
-        path: '/',
-        secure: process.env.NODE_ENV === 'production'
-      }
-    }
-  },
-  debug: process.env.NODE_ENV === 'development'
+  secret: process.env.NEXTAUTH_SECRET,
+  debug: process.env.NODE_ENV === "development",
 };
 
 const handler = NextAuth(authOptions);
