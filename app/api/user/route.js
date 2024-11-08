@@ -1,7 +1,11 @@
+// app/api/user/route.js
 import { NextResponse } from "next/server";
-import connectDB from "../../../backend/config/database";
-import User from "../../../backend/models/user";
+import bcrypt from "bcryptjs";
+import connectDB from "@/backend/config/database";
+import User from "@/backend/models/user";
+import Siswa from "@/backend/models/siswa";
 
+// Helper untuk koneksi database
 const connectToDatabase = async () => {
   if (!global.mongoose) {
     global.mongoose = connectDB();
@@ -12,7 +16,7 @@ const connectToDatabase = async () => {
 export async function GET(request) {
   await connectToDatabase();
   try {
-    const users = await User.find();
+    const users = await User.find().select("-password");
     return NextResponse.json({ success: true, data: users });
   } catch (error) {
     console.error("Error fetching users:", error);
@@ -29,67 +33,94 @@ export async function POST(request) {
 
   try {
     const body = await request.json();
-    const { nama, nisn, kelas, alamat, status, image } = body;
+    const { nama, username, email, password, phone, pengguna, image } = body;
 
-    // Validasi input
-    const requiredFields = ["nama", "nisn", "kelas", "alamat", "status"];
-    if (requiredFields.some((field) => !body[field])) {
+    // Validasi input dasar
+    const requiredFields = ["nama", "username", "email", "password", "phone", "pengguna"];
+    const missingFields = requiredFields.filter(field => !body[field]);
+    
+    if (missingFields.length > 0) {
       return NextResponse.json(
-        { success: false, error: "Semua field harus diisi" },
+        { 
+          success: false, 
+          error: `Field berikut harus diisi: ${missingFields.join(", ")}` 
+        },
         { status: 400 }
       );
     }
 
-    // Generate kredensial
-    const username = `siswa${nisn}`;
-    const password = nisn.toString(); // Pastikan NISN dalam bentuk string
+    // Cek apakah username sudah ada
+    const existingUser = await User.findOne({ username });
+    if (existingUser) {
+      return NextResponse.json(
+        { success: false, error: "Username sudah digunakan" },
+        { status: 400 }
+      );
+    }
 
-    // Hash password dengan bcrypt (pastikan salt rounds = 10)
+    // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Buat user baru
     const userData = {
       nama,
       username,
-      email: `${username}@smpadventtompaso.com`,
-      password: hashedPassword, // Password yang sudah di-hash
-      phone: "000000000000",
-      pengguna: "user",
+      email,
+      password: hashedPassword,
+      phone,
+      pengguna,
       image: image || "/noavatar.png",
     };
 
-    // Simpan user
-    const user = new User(userData);
-    createdUser = await user.save();
+    // Jika ini pembuatan user untuk siswa (dari form siswa)
+    if (body.isSiswa) {
+      const { nisn, kelas, alamat, status } = body;
+      
+      // Validasi tambahan untuk siswa
+      if (!nisn || !kelas || !alamat || !status) {
+        return NextResponse.json(
+          { success: false, error: "Data siswa tidak lengkap" },
+          { status: 400 }
+        );
+      }
 
-    // Buat data siswa
-    const siswaData = {
-      nama,
-      nisn,
-      kelas,
-      alamat,
-      status,
-      image: image || "/noavatar.png",
-      userId: createdUser._id,
-    };
+      // Buat user
+      createdUser = await User.create(userData);
 
-    // Simpan siswa
-    const siswa = new Siswa(siswaData);
-    const savedSiswa = await siswa.save();
+      // Buat data siswa
+      const siswaData = {
+        nama,
+        nisn,
+        kelas,
+        alamat,
+        status,
+        image: image || "/noavatar.png",
+        userId: createdUser._id,
+      };
 
-    // Kembalikan respons dengan kredensial yang benar
-    return NextResponse.json(
-      {
+      const siswa = await Siswa.create(siswaData);
+
+      return NextResponse.json({
         success: true,
-        data: savedSiswa,
+        data: siswa,
         credentials: {
           username,
-          password, // Password asli (sebelum di-hash)
-          email: userData.email,
-        },
-      },
-      { status: 201 }
-    );
+          password: password, // Password asli untuk ditampilkan sekali
+          email
+        }
+      }, { status: 201 });
+    }
+
+    // Untuk pembuatan user biasa
+    createdUser = await User.create(userData);
+    const userResponse = { ...createdUser.toObject() };
+    delete userResponse.password;
+
+    return NextResponse.json({
+      success: true,
+      data: userResponse
+    }, { status: 201 });
+
   } catch (error) {
     // Cleanup jika terjadi error
     if (createdUser) {
@@ -101,7 +132,10 @@ export async function POST(request) {
     }
 
     return NextResponse.json(
-      { success: false, error: "Gagal membuat akun siswa" },
+      { 
+        success: false, 
+        error: `Gagal membuat user: ${error.message}` 
+      },
       { status: 500 }
     );
   }
