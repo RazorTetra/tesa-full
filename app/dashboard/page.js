@@ -9,6 +9,7 @@ import Swal from "sweetalert2";
 import withReactContent from "sweetalert2-react-content";
 import LoadingIndicator from "../components/LoadingIndicator";
 import { SubjectCardSkeleton } from "../components/SubjectCardSkeleton";
+import { IoMdRefresh } from "react-icons/io";
 
 const MySwal = withReactContent(Swal);
 
@@ -54,25 +55,78 @@ const setLocalMidnight = (date) => {
   return localDate;
 };
 
+// fungsi untuk refresh data absensi
+const refreshAbsenData = async (mutate, setLoading, isHardRefresh = false) => {
+  try {
+    setLoading(true);
+    if (isHardRefresh) {
+      // Hard refresh: Bypass cache dan ambil langsung dari server
+      await fetch("/api/absen?today=true&timestamp=" + new Date().getTime(), {
+        cache: "no-store",
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      });
+    }
+    // Revalidate SWR cache
+    await mutate("/api/absen?today=true", undefined, { revalidate: true });
+
+    MySwal.fire({
+      icon: "success",
+      title: `Data berhasil ${
+        isHardRefresh ? "diperbarui (Hard Refresh)" : "diperbarui"
+      }`,
+      toast: true,
+      position: "top-end",
+      showConfirmButton: false,
+      timer: 3000,
+      timerProgressBar: true,
+    });
+  } catch (error) {
+    console.error("Refresh error:", error);
+    MySwal.fire({
+      icon: "error",
+      title: "Gagal memperbarui data",
+      text: error.message,
+      toast: true,
+      position: "top-end",
+      showConfirmButton: false,
+      timer: 3000,
+      timerProgressBar: true,
+    });
+  } finally {
+    setLoading(false);
+  }
+};
+
+// Fungsi helper untuk normalisasi tanggal
+const normalizeDate = (date) => {
+  const d = new Date(date);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+    2,
+    "0"
+  )}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
 const processAttendanceData = (data) => {
-  if (!data) return {};
+  if (!data || !Array.isArray(data)) return {};
 
   try {
-    // Gunakan waktu lokal GMT+8
-    const today = new Date();
-    const localToday = setLocalMidnight(today);
+    // Dapatkan tanggal hari ini dalam format YYYY-MM-DD
+    const today = normalizeDate(new Date());
 
+    // Filter records untuk hari ini
     const todayData = data.filter((record) => {
-      // Pastikan tanggal valid
-      if (!record.tanggal) return false;
-
-      // Konversi tanggal record ke GMT+8
-      const recordDate = setLocalMidnight(record.tanggal);
-      if (isNaN(recordDate.getTime())) return false;
-
-      return recordDate.getTime() === localToday.getTime();
+      if (!record?.tanggal) return false;
+      return normalizeDate(record.tanggal) === today;
     });
 
+    console.log("Today:", today);
+    console.log("Today Data:", todayData);
+
+    // Proses data per mata pelajaran
     const processedData = {};
     mataPelajaran.forEach((subject) => {
       processedData[subject] = todayData.filter(
@@ -81,6 +135,7 @@ const processAttendanceData = (data) => {
       );
     });
 
+    console.log("Processed Data:", processedData);
     return processedData;
   } catch (error) {
     console.error("Error processing attendance data:", error);
@@ -264,6 +319,9 @@ export default function Dashboard() {
 
   const [hoveredCard, setHoveredCard] = useState(null);
   const [dailyAttendanceData, setDailyAttendanceData] = useState({});
+
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const { mutate } = useSWR("/api/absen?today=true", fetcher);
 
   // SWR Configuration
   const swrOptions = {
@@ -594,14 +652,42 @@ export default function Dashboard() {
       </motion.div>
 
       {/* Daily Attendance Section */}
-      <motion.h2
-        className="text-3xl font-bold mb-6 text-white text-center"
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.6 }}
-      >
-        Data Absen Harian
-      </motion.h2>
+      <div className="flex justify-between items-center mb-6">
+        <motion.h2
+          className="text-3xl font-bold text-white"
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.6 }}
+        >
+          Data Absen Harian
+        </motion.h2>
+        <div className="relative">
+          <motion.div
+            className="flex gap-2"
+            initial={{ opacity: 0, scale: 0.5 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ delay: 0.7 }}
+          >
+            <button
+              onClick={() => refreshAbsenData(mutate, setIsRefreshing, true)}
+              disabled={isRefreshing}
+              className={`flex items-center px-4 py-2 rounded-lg border-l border-blue-700
+                ${
+                  isRefreshing
+                    ? "bg-gray-600 cursor-not-allowed"
+                    : "bg-blue-600 hover:bg-blue-700"
+                } 
+                text-white transition-all duration-300 shadow-lg hover:shadow-xl`}
+              title="Perbarui dan ambil data baru dari server"
+            >
+              <IoMdRefresh
+                className={`w-5 h-5 ${isRefreshing ? "animate-spin" : ""}`}
+              />
+              Refresh
+            </button>
+          </motion.div>
+        </div>
+      </div>
 
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -609,7 +695,12 @@ export default function Dashboard() {
         transition={{ delay: 0.7 }}
         className="grid gap-6 md:grid-cols-2"
       >
-        {!absenData
+        {isRefreshing
+          ? // Tampilkan skeleton loader saat refresh
+            [...Array(mataPelajaran.length)].map((_, index) => (
+              <SubjectCardSkeleton key={index} />
+            ))
+          : !absenData
           ? [...Array(mataPelajaran.length)].map((_, index) => (
               <SubjectCardSkeleton key={index} />
             ))

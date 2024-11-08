@@ -1,57 +1,62 @@
+// app/api/absen/route.js
 import { NextResponse } from "next/server";
 import connectDB from "../../../backend/config/database";
 import Absen from "../../../backend/models/absen";
 
-const connectToDatabase = async () => {
-  if (!global.mongoose) {
-    global.mongoose = connectDB();
-  }
-  await global.mongoose;
-};
-
 export async function GET(request) {
-  await connectToDatabase();
   try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    await connectDB();
+    
+    // Check if we want today's data only
+    const { searchParams } = new URL(request.url);
+    const today = searchParams.get("today");
 
-    const absensi = await Absen.find({
-      timestamp: { $gte: today, $lt: tomorrow },
-    }).sort({ timestamp: -1 });
+    let query = {};
+    if (today === "true") {
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+      
+      const endOfDay = new Date();
+      endOfDay.setHours(23, 59, 59, 999);
 
+      query.tanggal = {
+        $gte: startOfDay,
+        $lte: endOfDay
+      };
+    }
+
+    const absensi = await Absen.find(query).sort({ tanggal: -1 });
+    
     return NextResponse.json({ success: true, data: absensi });
   } catch (error) {
-    console.error("Error fetching absensi:", error);
+    console.error('Error in absen route:', error);
     return NextResponse.json(
-      { success: false, error: "Failed to fetch attendance data" },
+      { success: false, error: error.message },
       { status: 500 }
     );
   }
 }
 
 export async function POST(request) {
-  await connectToDatabase();
   try {
+    await connectDB();
     const body = await request.json();
-    const requiredFields = ['nama', 'tanggal', 'kelas', 'keterangan', 'mataPelajaran'];
-    const missingFields = requiredFields.filter(field => !body[field]);
+    
+    // Normalize tanggal
+    const formattedDate = new Date(body.tanggal);
+    formattedDate.setHours(0, 0, 0, 0);
+    body.tanggal = formattedDate;
 
-    if (missingFields.length > 0) {
-      return NextResponse.json(
-        { success: false, error: `Missing required fields: ${missingFields.join(', ')}` },
-        { status: 400 }
-      );
-    }
+    // Normalize mataPelajaran
+    body.mataPelajaran = body.mataPelajaran.trim().toUpperCase();
 
-    const newAbsen = new Absen(body);
-    await newAbsen.save();
-    return NextResponse.json({ success: true, data: newAbsen }, { status: 201 });
+    const absen = await Absen.create(body);
+    
+    return NextResponse.json({ success: true, data: absen });
   } catch (error) {
-    console.error("Error adding absen:", error);
+    console.error('Error in absen route:', error);
     return NextResponse.json(
-      { success: false, error: "Failed to add attendance record" },
+      { success: false, error: error.message },
       { status: 500 }
     );
   }

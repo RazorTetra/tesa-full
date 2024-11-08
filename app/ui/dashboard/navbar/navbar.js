@@ -53,6 +53,18 @@ const menuItems = [
         icon: <MdAssignment />,
         adminOnly: true
       },
+      {
+        title: "Attendance",
+        path: "/dashboard/attendance",
+        icon: <MdAssignment />,
+        adminOnly: true
+      },
+      {
+        title: "Tahun Ajaran",
+        path: "/dashboard/tahun-ajaran",
+        icon: <MdAssignment />,
+        adminOnly: true
+      },
     ],
   },
   {
