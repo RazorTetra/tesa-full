@@ -1,65 +1,50 @@
 // backend/config/database.js
-
 const mongoose = require("mongoose");
 
-// Validasi URI MongoDB
-if (!process.env.MONGODB_URI) {
-  throw new Error('Please define the MONGODB_URI environment variable inside .env');
-}
+// Singleton connection
+let isConnected = false;
 
-/**
- * Global is used here to maintain a cached connection across hot reloads
- * in development. This prevents connections growing exponentially
- * during API Route usage.
- */
-let cached = global.mongoose;
-
-if (!cached) {
-  cached = global.mongoose = { conn: null, promise: null };
-}
-
-async function connectDB() {
-  if (cached.conn) {
-    return cached.conn;
+const connectDB = async () => {
+  if (isConnected) {
+    console.log('Using existing database connection');
+    return;
   }
 
-  if (!cached.promise) {
+  try {
+    const MONGODB_URI = process.env.MONGODB_URI;
+    
     const opts = {
-      bufferCommands: false,
-      maxPoolSize: 10,
-      serverSelectionTimeoutMS: 5000,
+      maxPoolSize: 1, // Strict limit on connections
+      minPoolSize: 1, // Keep one connection alive
+      connectTimeoutMS: 10000,
       socketTimeoutMS: 45000,
-      family: 4,
-      keepAlive: true,
-      keepAliveInitialDelay: 300000
+      serverSelectionTimeoutMS: 10000,
+      heartbeatFrequencyMS: 10000,  
+      family: 4
     };
 
-    cached.promise = mongoose.connect(process.env.MONGODB_URI, opts).then((mongoose) => {
-      console.log('MongoDB connected successfully');
-      return mongoose;
+    await mongoose.connect(MONGODB_URI, opts);
+    
+    isConnected = true;
+    console.log('New database connection established');
+
+    // Handle disconnection events
+    mongoose.connection.on('disconnected', () => {
+      console.log('DB disconnected');
+      isConnected = false;
     });
-  }
 
-  try {
-    cached.conn = await cached.promise;
-  } catch (e) {
-    cached.promise = null;
-    throw e;
-  }
+    mongoose.connection.on('error', (err) => {
+      console.error('DB connection error:', err);
+      isConnected = false;
+    });
 
-  return cached.conn;
-}
-
-// Graceful shutdown handler
-process.on('SIGINT', async () => {
-  try {
-    await mongoose.connection.close();
-    console.log('MongoDB connection closed through app termination');
-    process.exit(0);
-  } catch (err) {
-    console.error('Error during MongoDB connection closure:', err);
-    process.exit(1);
+  } catch (error) {
+    console.error('Could not connect to DB:', error);
+    // Reset flag so next request tries to connect again
+    isConnected = false;
+    throw error;
   }
-});
+};
 
 module.exports = connectDB;
