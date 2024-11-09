@@ -104,16 +104,16 @@ export default function AttendancePage() {
   };
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-6">Rekap Kehadiran Siswa</h1>
+    <div className="p-6 bg-gradient-to-br from-slate-900 to-indigo-950 min-h-screen">
+      <h1 className="text-2xl font-bold mb-6 text-white">Rekap Kehadiran Siswa</h1>
 
-      <div className="bg-white p-6 rounded-lg shadow mb-6">
+      <div className="bg-slate-800/50 p-6 rounded-lg shadow-lg backdrop-blur-sm mb-6 border border-slate-700">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <select
             name="tahunAjaran"
             value={filters.tahunAjaran}
             onChange={handleFilterChange}
-            className="border p-2 rounded"
+            className="bg-slate-900 border-slate-700 text-white p-2 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             <option value="">Pilih Tahun Ajaran</option>
             {tahunAjaranList.map((ta) => (
@@ -127,7 +127,7 @@ export default function AttendancePage() {
             name="semester"
             value={filters.semester}
             onChange={handleFilterChange}
-            className="border p-2 rounded"
+            className="bg-slate-900 border-slate-700 text-white p-2 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             <option value="">Pilih Semester</option>
             <option value="1">Semester 1</option>
@@ -138,7 +138,7 @@ export default function AttendancePage() {
             name="kelas"
             value={filters.kelas}
             onChange={handleFilterChange}
-            className="border p-2 rounded"
+            className="bg-slate-900 border-slate-700 text-white p-2 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
             <option value="">Pilih Kelas</option>
             {kelas.map((k) => (
@@ -150,7 +150,7 @@ export default function AttendancePage() {
         </div>
 
         {activeTahunAjaran && (
-          <div className="text-sm text-gray-600">
+          <div className="text-sm text-slate-400">
             Tahun Ajaran Aktif: {activeTahunAjaran.tahunAjaran} - Semester{" "}
             {activeTahunAjaran.semester}
           </div>
@@ -158,42 +158,42 @@ export default function AttendancePage() {
       </div>
 
       {loading ? (
-        <div className="text-center py-4">Loading...</div>
+        <div className="text-center py-4 text-white">Loading...</div>
       ) : (
-        <div className="bg-white rounded-lg shadow overflow-x-auto">
+        <div className="bg-slate-800/50 rounded-lg shadow-lg backdrop-blur-sm border border-slate-700 overflow-x-auto">
           <table className="min-w-full">
             <thead>
-              <tr className="bg-gray-50">
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <tr className="border-b border-slate-700">
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
                   Nama Siswa
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
                   NISN
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">
                   Hadir
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">
                   Sakit
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">
                   Izin
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">
                   Alpa
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">
                   Total Hari
                 </th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">
                   Persentase
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="divide-y divide-slate-700">
               {attendanceData.length > 0 ? (
                 attendanceData.map((attendance) => (
-                  <tr key={attendance._id}>
+                  <tr key={attendance._id} className="text-slate-300">
                     <td className="px-6 py-4 whitespace-nowrap">
                       {attendance.siswaId.nama}
                     </td>
@@ -225,7 +225,7 @@ export default function AttendancePage() {
                 ))
               ) : (
                 <tr>
-                  <td colSpan={8} className="px-6 py-4 text-center">
+                  <td colSpan={8} className="px-6 py-4 text-center text-slate-400">
                     Tidak ada data kehadiran untuk filter yang dipilih
                   </td>
                 </tr>
