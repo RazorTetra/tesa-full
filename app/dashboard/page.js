@@ -1,7 +1,7 @@
 // app/dashboard/page.js
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSession } from "next-auth/react";
 import useSWR from "swr";
@@ -38,40 +38,63 @@ const fetcher = async (url) => {
 };
 
 // =============== Helper Functions ===============
-const normalizeString = (str) => str.trim().toUpperCase();
-
 // Helper untuk mendapatkan tanggal lokal GMT+8
 const getLocalDate = (date) => {
   const localDate = new Date(date);
-  // Sesuaikan ke GMT+8
-  localDate.setHours(localDate.getHours() + 8);
-  return localDate;
+  return new Date(localDate.getTime() + 8 * 60 * 60 * 1000);
 };
 
-// Helper untuk format tanggal ke midnight GMT+8
-const setLocalMidnight = (date) => {
+// Helper untuk normalisasi string
+const normalizeString = (str) => {
+  if (!str) return "";
+  return str.trim().toUpperCase();
+};
+// Helper untuk format tanggal lokal
+const formatLocalDate = (date) => {
   const localDate = getLocalDate(date);
-  localDate.setHours(0, 0, 0, 0);
-  return localDate;
+  return localDate.toLocaleDateString("id-ID", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 };
 
 // fungsi untuk refresh data absensi
 const refreshAbsenData = async (mutate, setLoading, isHardRefresh = false) => {
   try {
     setLoading(true);
-    if (isHardRefresh) {
-      // Hard refresh: Bypass cache dan ambil langsung dari server
-      await fetch("/api/absen?today=true&timestamp=" + new Date().getTime(), {
-        cache: "no-store",
-        headers: {
-          "Cache-Control": "no-cache, no-store, must-revalidate",
-          Pragma: "no-cache",
-          Expires: "0",
-        },
-      });
+    let params = new URLSearchParams();
+
+    // Get active tahun ajaran
+    const tahunAjaranRes = await fetch("/api/tahun-ajaran/active");
+    const tahunAjaranData = await tahunAjaranRes.json();
+
+    if (tahunAjaranData.success) {
+      params.append("tahunAjaran", tahunAjaranData.data.tahunAjaran);
+      params.append("semester", tahunAjaranData.data.semester);
     }
-    // Revalidate SWR cache
-    await mutate("/api/absen?today=true", undefined, { revalidate: true });
+
+    params.append("today", "true");
+
+    if (isHardRefresh) {
+      params.append("timestamp", new Date().getTime());
+    }
+
+    const response = await fetch(`/api/absen?${params.toString()}`, {
+      cache: isHardRefresh ? "no-store" : "default",
+      headers: isHardRefresh
+        ? {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            Pragma: "no-cache",
+            Expires: "0",
+          }
+        : {},
+    });
+
+    if (!response.ok) throw new Error("Network response was not ok");
+
+    await mutate();
 
     MySwal.fire({
       icon: "success",
@@ -101,46 +124,19 @@ const refreshAbsenData = async (mutate, setLoading, isHardRefresh = false) => {
   }
 };
 
-// Fungsi helper untuk normalisasi tanggal
-const normalizeDate = (date) => {
-  const d = new Date(date);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
-    2,
-    "0"
-  )}-${String(d.getDate()).padStart(2, "0")}`;
-};
-
 const processAttendanceData = (data) => {
-  if (!data || !Array.isArray(data)) return {};
+  if (!data?.success || !Array.isArray(data.data)) return {};
 
-  try {
-    // Dapatkan tanggal hari ini dalam format YYYY-MM-DD
-    const today = normalizeDate(new Date());
+  const processedData = {};
 
-    // Filter records untuk hari ini
-    const todayData = data.filter((record) => {
-      if (!record?.tanggal) return false;
-      return normalizeDate(record.tanggal) === today;
-    });
+  mataPelajaran.forEach((subject) => {
+    processedData[subject] = data.data.filter(
+      (record) =>
+        normalizeString(record.mataPelajaran) === normalizeString(subject)
+    );
+  });
 
-    console.log("Today:", today);
-    console.log("Today Data:", todayData);
-
-    // Proses data per mata pelajaran
-    const processedData = {};
-    mataPelajaran.forEach((subject) => {
-      processedData[subject] = todayData.filter(
-        (record) =>
-          normalizeString(record.mataPelajaran) === normalizeString(subject)
-      );
-    });
-
-    console.log("Processed Data:", processedData);
-    return processedData;
-  } catch (error) {
-    console.error("Error processing attendance data:", error);
-    return {};
-  }
+  return processedData;
 };
 
 const calculateChange = (currentValue, type) => {
@@ -153,17 +149,8 @@ const calculateChange = (currentValue, type) => {
   return baseChanges[type] || 0;
 };
 
-const formatLocalDate = (date) => {
-  const localDate = getLocalDate(date);
-  return localDate.toLocaleDateString("id-ID", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-};
-
 // =============== Components ===============
+
 function Card({ title, value, change, isHovered }) {
   const isPositive = change >= 0;
   return (
@@ -198,26 +185,56 @@ function Card({ title, value, change, isHovered }) {
   );
 }
 
-function Table({ students, absenData }) {
+// Modifikasi function Table
+function Table({ students, attendanceData, tahunAjaranAktif }) {
+  const [studentPercentages, setStudentPercentages] = useState({});
   const [hoveredRow, setHoveredRow] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const calculateAttendancePercentage = (studentName) => {
-    if (!absenData || !studentName) return 0;
+  useEffect(() => {
+    const fetchAttendancePercentages = async () => {
+      if (!tahunAjaranAktif) {
+        setIsLoading(false);
+        return;
+      }
 
-    const studentAttendance = absenData.filter(
-      (record) =>
-        record.nama === studentName &&
-        record.keterangan.toLowerCase() === "hadir"
-    ).length;
+      try {
+        setIsLoading(true);
+        const percentages = {};
 
-    const totalRecords = absenData.filter(
-      (record) => record.nama === studentName
-    ).length;
+        for (const student of students) {
+          const res = await fetch(
+            `/api/attendance/siswa/${student._id}?semester=${tahunAjaranAktif.semester}&tahunAjaran=${tahunAjaranAktif.tahunAjaran}`
+          );
 
-    return totalRecords === 0
-      ? 0
-      : Math.round((studentAttendance / totalRecords) * 100);
-  };
+          if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+
+          const data = await res.json();
+
+          if (data.success) {
+            percentages[student._id] =
+              data.data.attendance.persentaseKehadiran || 0;
+          } else {
+            percentages[student._id] = 0;
+          }
+        }
+
+        setStudentPercentages(percentages);
+      } catch (err) {
+        console.error("Error fetching attendance:", err);
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchAttendancePercentages();
+  }, [students, tahunAjaranAktif]);
+
+  if (error) {
+    return <div className="text-red-500">Error: {error}</div>;
+  }
 
   return (
     <div className="bg-gradient-to-br from-indigo-950 to-slate-900 p-6 rounded-2xl shadow-lg overflow-x-auto backdrop-blur-md bg-opacity-40">
@@ -232,9 +249,7 @@ function Table({ students, absenData }) {
         </thead>
         <tbody>
           {students.map((student, index) => {
-            const attendancePercentage = calculateAttendancePercentage(
-              student.nama
-            );
+            const attendancePercentage = studentPercentages[student._id] || 0;
             return (
               <motion.tr
                 key={student._id}
@@ -262,7 +277,9 @@ function Table({ students, absenData }) {
                       />
                     </div>
                     <span className="min-w-[3ch] text-gray-300">
-                      {attendancePercentage}%
+                      {isLoading
+                        ? "..."
+                        : `${attendancePercentage.toFixed(1)}%`}
                     </span>
                   </div>
                 </td>
@@ -276,14 +293,16 @@ function Table({ students, absenData }) {
 }
 
 function SubjectCard({ subject, attendanceData, onViewAttendance }) {
-  const presentCount =
-    attendanceData?.filter(
-      (record) => record.keterangan?.toLowerCase() === "hadir"
-    )?.length || 0;
+  const stats = {
+    hadir: attendanceData.filter((r) => r.keterangan === "HADIR").length,
+    sakit: attendanceData.filter((r) => r.keterangan === "SAKIT").length,
+    izin: attendanceData.filter((r) => r.keterangan === "IZIN").length,
+    alpa: attendanceData.filter((r) => r.keterangan === "ALPA").length,
+  };
 
   return (
     <motion.div
-      className="bg-gradient-to-br from-indigo-950 to-slate-900 p-6 rounded-2xl shadow-lg backdrop-blur-md bg-opacity-60 flex justify-between items-center"
+      className="bg-gradient-to-br from-indigo-950 to-slate-900 p-6 rounded-2xl shadow-lg backdrop-blur-md bg-opacity-60"
       whileHover={{
         scale: 1.02,
         boxShadow: "0px 0px 20px rgba(59, 130, 246, 0.4)",
@@ -292,19 +311,20 @@ function SubjectCard({ subject, attendanceData, onViewAttendance }) {
     >
       <div>
         <h3 className="text-2xl font-semibold mb-2 text-white">{subject}</h3>
-        <p className="text-gray-200">
-          {attendanceData?.length > 0
-            ? `Jumlah Hadir: ${presentCount}`
-            : "Belum ada absensi hari ini"}
-        </p>
+        <div className="grid grid-cols-2 gap-4 mb-4">
+          <div>
+            <p className="text-green-400">Hadir: {stats.hadir}</p>
+            <p className="text-yellow-400">Sakit: {stats.sakit}</p>
+          </div>
+          <div>
+            <p className="text-blue-400">Izin: {stats.izin}</p>
+            <p className="text-red-400">Alpa: {stats.alpa}</p>
+          </div>
+        </div>
       </div>
       <button
         onClick={() => onViewAttendance(subject, attendanceData)}
-        className={`${
-          attendanceData?.length === 0
-            ? "bg-gray-600 cursor-not-allowed"
-            : "bg-white bg-opacity-20 hover:bg-opacity-30"
-        } text-white font-bold py-2 px-4 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg`}
+        className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white font-bold py-2 px-4 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg w-full"
       >
         Lihat Absensi
       </button>
@@ -319,9 +339,8 @@ export default function Dashboard() {
 
   const [hoveredCard, setHoveredCard] = useState(null);
   const [dailyAttendanceData, setDailyAttendanceData] = useState({});
-
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const { mutate } = useSWR("/api/absen?today=true", fetcher);
+  const [tahunAjaranAktif, setTahunAjaranAktif] = useState(null);
 
   // SWR Configuration
   const swrOptions = {
@@ -331,6 +350,11 @@ export default function Dashboard() {
   };
 
   // Data Fetching
+  const { data: tahunAjaranData } = useSWR(
+    "/api/tahun-ajaran/active",
+    fetcher,
+    swrOptions
+  );
   const { data: studentsData, error: studentsError } = useSWR(
     "/api/siswa",
     fetcher,
@@ -351,15 +375,33 @@ export default function Dashboard() {
     fetcher,
     swrOptions
   );
-  const { data: absenData, error: absenError } = useSWR("/api/absen", fetcher, {
-    ...swrOptions,
-    onSuccess: (data) => {
-      if (data.success) {
-        const processedData = processAttendanceData(data.data);
-        setDailyAttendanceData(processedData);
-      }
-    },
-  });
+
+  const {
+    data: absenData,
+    error: absenError,
+    mutate,
+  } = useSWR(
+    tahunAjaranAktif
+      ? `/api/absen?today=true&tahunAjaran=${tahunAjaranAktif.tahunAjaran}&semester=${tahunAjaranAktif.semester}`
+      : null,
+    fetcher,
+    {
+      ...swrOptions,
+      onSuccess: (data) => {
+        if (data?.success) {
+          const processedData = processAttendanceData(data, tahunAjaranAktif);
+          setDailyAttendanceData(processedData);
+        }
+      },
+    }
+  );
+
+  // Set tahun ajaran aktif when data is loaded
+  useEffect(() => {
+    if (tahunAjaranData?.success) {
+      setTahunAjaranAktif(tahunAjaranData.data);
+    }
+  }, [tahunAjaranData]);
 
   const isLoading =
     !studentsData ||
@@ -421,14 +463,9 @@ export default function Dashboard() {
   };
 
   const showAttendanceDetails = (subject, selectedClass, attendanceData) => {
-    // Filter untuk mendapatkan semua data kelas yang dimulai dengan VII, VIII, atau IX
     const filteredData = attendanceData.filter((record) => {
-      return record.kelas.startsWith(selectedClass);
+      return record.siswaId.kelas.startsWith(selectedClass);
     });
-
-    console.log("Selected Class:", selectedClass);
-    console.log("Filtered Data:", filteredData);
-    console.log("All Data:", attendanceData);
 
     const attendanceTable = generateAttendanceTable(filteredData);
 
@@ -457,7 +494,6 @@ export default function Dashboard() {
           "bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded",
       },
     }).then((result) => {
-      // Tambahkan handler untuk tombol cetak
       if (result.isConfirmed && isAdmin) {
         handlePrint(subject, selectedClass, filteredData);
       }
@@ -466,125 +502,125 @@ export default function Dashboard() {
 
   const generateAttendanceTable = (filteredData) => {
     return `
-      <table style="width: 100%; text-align: left; border-collapse: collapse; color: white;">
-        <thead>
+    <table style="width: 100%; text-align: left; border-collapse: collapse; color: white;">
+      <thead>
+        <tr>
+          <th style="border-bottom: 1px solid #4B5563; padding: 12px;">Nama</th>
+          <th style="border-bottom: 1px solid #4B5563; padding: 12px;">Kelas</th>
+          <th style="border-bottom: 1px solid #4B5563; padding: 12px;">Tanggal</th>
+          <th style="border-bottom: 1px solid #4B5563; padding: 12px;">Keterangan</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${filteredData
+          .map(
+            (record) => `
           <tr>
-            <th style="border-bottom: 1px solid #4B5563; padding: 12px;">Nama</th>
-            <th style="border-bottom: 1px solid #4B5563; padding: 12px;">Kelas</th>
-            <th style="border-bottom: 1px solid #4B5563; padding: 12px;">Tanggal</th>
-            <th style="border-bottom: 1px solid #4B5563; padding: 12px;">Keterangan</th>
+            <td style="padding: 12px; border-bottom: 1px solid #374151;">${
+              record.siswaId.nama
+            }</td>
+            <td style="padding: 12px; border-bottom: 1px solid #374151;">${
+              record.siswaId.kelas
+            }</td>
+            <td style="padding: 12px; border-bottom: 1px solid #374151;">
+              ${formatLocalDate(record.tanggal)}
+            </td>
+            <td style="padding: 12px; border-bottom: 1px solid #374151;">${
+              record.keterangan
+            }</td>
           </tr>
-        </thead>
-        <tbody>
-          ${filteredData
-            .map(
-              (record) => `
-            <tr>
-              <td style="padding: 12px; border-bottom: 1px solid #374151;">${
-                record.nama
-              }</td>
-              <td style="padding: 12px; border-bottom: 1px solid #374151;">${
-                record.kelas
-              }</td>
-              <td style="padding: 12px; border-bottom: 1px solid #374151;">
-                ${formatLocalDate(record.tanggal)}
-              </td>
-              <td style="padding: 12px; border-bottom: 1px solid #374151;">${
-                record.keterangan
-              }</td>
-            </tr>
-          `
-            )
-            .join("")}
-        </tbody>
-      </table>
-    `;
+        `
+          )
+          .join("")}
+      </tbody>
+    </table>
+  `;
   };
 
   const handlePrint = (subject, selectedClass, filteredData) => {
     const now = getLocalDate(new Date());
     const printWindow = window.open("", "_blank");
     printWindow.document.write(`
-      <html>
-        <head>
-          <title>Cetak Absensi ${subject} - Kelas ${selectedClass}</title>
-          <style>
-            body { 
-              font-family: Arial, sans-serif;
-              padding: 20px;
-            }
-            h1 { 
-              text-align: center;
-              margin-bottom: 20px;
-            }
-            table { 
-              width: 100%; 
-              border-collapse: collapse; 
-              margin-bottom: 20px;
-            }
-            th, td { 
-              border: 1px solid #ddd; 
-              padding: 8px; 
-              text-align: left; 
-            }
-            th { 
-              background-color: #f2f2f2;
-              font-weight: bold;
-            }
-            .print-date {
-              text-align: right;
-              margin-bottom: 20px;
-            }
-            @media print {
-              table { page-break-inside: auto }
-              tr { page-break-inside: avoid; page-break-after: auto }
-            }
-          </style>
-        </head>
-        <body>
-          <h1>Absensi - ${subject} (Kelas ${selectedClass})</h1>
-          <div class="print-date">
-            Dicetak pada: ${now.toLocaleString("id-ID")}
-          </div>
-          <table>
-            <thead>
+    <html>
+      <head>
+        <title>Cetak Absensi ${subject} - Kelas ${selectedClass}</title>
+        <style>
+          body { 
+            font-family: Arial, sans-serif;
+            padding: 20px;
+          }
+          h1 { 
+            text-align: center;
+            margin-bottom: 20px;
+          }
+          table { 
+            width: 100%; 
+            border-collapse: collapse; 
+            margin-bottom: 20px;
+          }
+          th, td { 
+            border: 1px solid #ddd; 
+            padding: 8px; 
+            text-align: left; 
+          }
+          th { 
+            background-color: #f2f2f2;
+            font-weight: bold;
+          }
+          .print-date {
+            text-align: right;
+            margin-bottom: 20px;
+          }
+          @media print {
+            table { page-break-inside: auto }
+            tr { page-break-inside: avoid; page-break-after: auto }
+          }
+        </style>
+      </head>
+      <body>
+        <h1>Absensi - ${subject} (Kelas ${selectedClass})</h1>
+        <div class="print-date">
+          Dicetak pada: ${now.toLocaleString("id-ID")}
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Nama</th>
+              <th>Kelas</th>
+              <th>Tanggal</th>
+              <th>Keterangan</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filteredData
+              .map(
+                (record) => `
               <tr>
-                <th>Nama</th>
-                <th>Kelas</th>
-                <th>Tanggal</th>
-                <th>Keterangan</th>
+                <td>${record.siswaId.nama}</td>
+                <td>${record.siswaId.kelas}</td>
+                <td>${formatLocalDate(record.tanggal)}</td>
+                <td>${record.keterangan}</td>
               </tr>
-            </thead>
-            <tbody>
-              ${filteredData
-                .map(
-                  (record) => `
-                <tr>
-                  <td>${record.nama}</td>
-                  <td>${record.kelas}</td>
-                  <td>${formatLocalDate(record.tanggal)}</td>
-                  <td>${record.keterangan}</td>
-                </tr>
-              `
-                )
-                .join("")}
-            </tbody>
-          </table>
-          <div style="margin-top: 50px;">
-            <p style="text-align: right;">
-              Tompaso, ${now.toLocaleDateString("id-ID", {
-                day: "numeric",
-                month: "long",
-                year: "numeric",
-              })}
-              <br><br><br><br>
-              _____________________<br>
-              Kepala Sekolah
-            </p>
-          </div>
-        </body>
-      </html>
-    `);
+            `
+              )
+              .join("")}
+          </tbody>
+        </table>
+        <div style="margin-top: 50px;">
+          <p style="text-align: right;">
+            Tompaso, ${now.toLocaleDateString("id-ID", {
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            })}
+            <br><br><br><br>
+            _____________________<br>
+            Kepala Sekolah
+          </p>
+        </div>
+      </body>
+    </html>
+  `);
     printWindow.document.close();
     printWindow.print();
   };
@@ -647,7 +683,8 @@ export default function Dashboard() {
       >
         <Table
           students={studentsData?.data || []}
-          absenData={absenData?.data || []}
+          attendanceData={absenData}
+          tahunAjaranAktif={tahunAjaranAktif}
         />
       </motion.div>
 
@@ -660,6 +697,12 @@ export default function Dashboard() {
           transition={{ delay: 0.6 }}
         >
           Data Absen Harian
+          {tahunAjaranAktif && (
+            <span className="text-sm font-normal text-gray-400 ml-4">
+              Tahun Ajaran: {tahunAjaranAktif.tahunAjaran} - Semester{" "}
+              {tahunAjaranAktif.semester}
+            </span>
+          )}
         </motion.h2>
         <div className="relative">
           <motion.div
@@ -672,12 +715,12 @@ export default function Dashboard() {
               onClick={() => refreshAbsenData(mutate, setIsRefreshing, true)}
               disabled={isRefreshing}
               className={`flex items-center px-4 py-2 rounded-lg border-l border-blue-700
-                ${
-                  isRefreshing
-                    ? "bg-gray-600 cursor-not-allowed"
-                    : "bg-blue-600 hover:bg-blue-700"
-                } 
-                text-white transition-all duration-300 shadow-lg hover:shadow-xl`}
+              ${
+                isRefreshing
+                  ? "bg-gray-600 cursor-not-allowed"
+                  : "bg-blue-600 hover:bg-blue-700"
+              } 
+              text-white transition-all duration-300 shadow-lg hover:shadow-xl`}
               title="Perbarui dan ambil data baru dari server"
             >
               <IoMdRefresh
@@ -696,8 +739,7 @@ export default function Dashboard() {
         className="grid gap-6 md:grid-cols-2"
       >
         {isRefreshing
-          ? // Tampilkan skeleton loader saat refresh
-            [...Array(mataPelajaran.length)].map((_, index) => (
+          ? [...Array(mataPelajaran.length)].map((_, index) => (
               <SubjectCardSkeleton key={index} />
             ))
           : !absenData

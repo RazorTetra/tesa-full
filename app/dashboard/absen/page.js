@@ -1,5 +1,5 @@
 // app/dashboard/absen/page.js
-'use client'
+"use client";
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -22,10 +22,20 @@ export default function Absen() {
   const [loading, setLoading] = useState(false)
   const [studentData, setStudentData] = useState(null)
   const [allStudents, setAllStudents] = useState([])
+  const [activeTahunAjaran, setActiveTahunAjaran] = useState(null)
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchInitialData = async () => {
       try {
+        // Fetch tahun ajaran aktif terlebih dahulu
+        const tahunAjaranRes = await fetch('/api/tahun-ajaran/active');
+        const tahunAjaranData = await tahunAjaranRes.json();
+        
+        if (!tahunAjaranData.success) {
+          throw new Error('Tidak ada tahun ajaran aktif');
+        }
+        setActiveTahunAjaran(tahunAjaranData.data);
+
         if (session?.user?.role === "admin") {
           // Fetch all students for admin
           const response = await fetch('/api/siswa')
@@ -46,18 +56,22 @@ export default function Absen() {
         MySwal.fire({
           icon: 'error',
           title: 'Error',
-          text: 'Gagal mengambil data',
+          text: error.message || 'Gagal mengambil data',
         })
       }
     }
 
     if (session) {
-      fetchData()
+      fetchInitialData()
     }
   }, [session])
 
   const handleAbsen = async (mapel) => {
     try {
+      if (!activeTahunAjaran) {
+        throw new Error("Tahun ajaran aktif tidak ditemukan");
+      }
+
       setLoading(true)
 
       if (session?.user?.role === "user") {
@@ -70,9 +84,10 @@ export default function Absen() {
           title: `Absensi ${mapel}`,
           input: 'select',
           inputOptions: {
-            Hadir: 'Hadir',
-            'Tidak Hadir': 'Tidak Hadir',
-            Terlambat: 'Terlambat'
+            'HADIR': 'Hadir',
+            'SAKIT': 'Sakit',
+            'IZIN': 'Izin',
+            'ALPA': 'Alpa'
           },
           inputPlaceholder: 'Pilih Keterangan',
           showCancelButton: true,
@@ -86,11 +101,13 @@ export default function Absen() {
         }
 
         const formData = {
-          nama: studentData.nama,
-          tanggal: new Date().toISOString().split('T')[0],
+          siswaId: studentData._id,
+          tanggal: new Date().toISOString(),
           kelas: studentData.kelas,
           keterangan: keteranganValue,
-          mataPelajaran: mapel
+          mataPelajaran: mapel,
+          semester: activeTahunAjaran.semester,
+          tahunAjaran: activeTahunAjaran.tahunAjaran
         }
 
         await submitAbsensi(formData)
@@ -136,9 +153,10 @@ export default function Absen() {
           title: `Pilih Keterangan`,
           input: 'select',
           inputOptions: {
-            Hadir: 'Hadir',
-            'Tidak Hadir': 'Tidak Hadir',
-            Terlambat: 'Terlambat'
+            'HADIR': 'Hadir',
+            'SAKIT': 'Sakit',
+            'IZIN': 'Izin',
+            'ALPA': 'Alpa'
           },
           inputPlaceholder: 'Pilih Keterangan',
           showCancelButton: true,
@@ -152,11 +170,13 @@ export default function Absen() {
         }
 
         const formData = {
-          nama: selectedStudent.nama,
-          tanggal: tanggalValue,
+          siswaId: selectedStudentId,
+          tanggal: new Date(tanggalValue).toISOString(),
           kelas: selectedStudent.kelas,
           keterangan: keteranganValue,
-          mataPelajaran: mapel
+          mataPelajaran: mapel,
+          semester: activeTahunAjaran.semester,
+          tahunAjaran: activeTahunAjaran.tahunAjaran
         }
 
         await submitAbsensi(formData)
@@ -185,8 +205,10 @@ export default function Absen() {
       body: JSON.stringify(formData)
     })
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+    const data = await response.json()
+    console.log('Form Data:', formData)
+    if (!data.success) {
+      throw new Error(data.error || 'Gagal mengirim absensi')
     }
 
     await MySwal.fire({
@@ -205,6 +227,9 @@ export default function Absen() {
           <p>Nama: {studentData.nama}</p>
           <p>NISN: {studentData.nisn}</p>
           <p>Kelas: {studentData.kelas}</p>
+          {activeTahunAjaran && (
+            <p>Tahun Ajaran: {activeTahunAjaran.tahunAjaran} - Semester {activeTahunAjaran.semester}</p>
+          )}
         </div>
       )
     }
@@ -215,6 +240,14 @@ export default function Absen() {
     return (
       <div className={styles.unauthorized}>
         Anda harus login terlebih dahulu
+      </div>
+    )
+  }
+
+  if (!activeTahunAjaran) {
+    return (
+      <div className={styles.unauthorized}>
+        Tidak ada tahun ajaran aktif
       </div>
     )
   }

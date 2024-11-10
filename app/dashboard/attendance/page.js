@@ -5,7 +5,10 @@ import { useState, useEffect } from "react";
 
 export default function AttendancePage() {
   const [loading, setLoading] = useState(true);
-  const [attendanceData, setAttendanceData] = useState([]);
+  const [rekapData, setRekapData] = useState({
+    rekapKehadiran: [],
+    statistikKelas: {},
+  });
   const [tahunAjaranList, setTahunAjaranList] = useState([]);
   const [activeTahunAjaran, setActiveTahunAjaran] = useState(null);
   const [filters, setFilters] = useState({
@@ -38,6 +41,7 @@ export default function AttendancePage() {
           }));
         }
       } catch (error) {
+        console.error("Error fetching tahun ajaran:", error);
         alert("Gagal mengambil data tahun ajaran");
       }
     };
@@ -58,6 +62,7 @@ export default function AttendancePage() {
           setKelas(uniqueKelas.sort());
         }
       } catch (error) {
+        console.error("Error fetching kelas:", error);
         alert("Gagal mengambil data kelas");
       }
     };
@@ -65,30 +70,36 @@ export default function AttendancePage() {
     fetchKelas();
   }, []);
 
-  // Fetch attendance data when filters change
+  // Fetch rekap data when filters change
   useEffect(() => {
-    const fetchAttendance = async () => {
-      if (!filters.semester || !filters.tahunAjaran || !filters.kelas) return;
+    const fetchRekap = async () => {
+      if (!filters.semester || !filters.tahunAjaran) return;
 
       setLoading(true);
       try {
-        const queryString = new URLSearchParams(filters).toString();
-        const response = await fetch(`/api/attendance?${queryString}`);
+        const queryParams = new URLSearchParams({
+          semester: filters.semester,
+          tahunAjaran: filters.tahunAjaran,
+          ...(filters.kelas && { kelas: filters.kelas }),
+        });
+
+        const response = await fetch(`/api/attendance/rekap?${queryParams}`);
         const data = await response.json();
 
         if (data.success) {
-          setAttendanceData(data.data);
+          setRekapData(data.data);
         } else {
           throw new Error(data.error);
         }
       } catch (error) {
-        alert("Gagal mengambil data kehadiran");
+        console.error("Error fetching rekap:", error);
+        alert("Gagal mengambil data rekap kehadiran");
       } finally {
         setLoading(false);
       }
     };
 
-    fetchAttendance();
+    fetchRekap();
   }, [filters]);
 
   const handleFilterChange = (e) => {
@@ -99,13 +110,46 @@ export default function AttendancePage() {
     }));
   };
 
-  const calculatePercentage = (present, total) => {
-    return ((present / total) * 100).toFixed(1) + "%";
+  const renderStatistikKelas = () => {
+    if (
+      !rekapData.statistikKelas ||
+      Object.keys(rekapData.statistikKelas).length === 0
+    ) {
+      return null;
+    }
+
+    return (
+      <div className="mb-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {Object.entries(rekapData.statistikKelas).map(([kelas, stats]) => (
+          <div
+            key={kelas}
+            className="bg-slate-800/30 p-4 rounded-lg border border-slate-700"
+          >
+            <h3 className="text-lg font-semibold text-white mb-2">
+              Kelas {kelas}
+            </h3>
+            <div className="space-y-2 text-sm text-slate-300">
+              <p>Total Siswa: {stats.totalSiswa}</p>
+              <p>Rata-rata Kehadiran: {stats.rataRataKehadiran}%</p>
+              <p>Total Hari Efektif: {stats.totalHariEfektif}</p>
+              <div className="grid grid-cols-2 gap-2 mt-2 text-xs">
+                <p>Hadir: {stats.detailKehadiran.hadir}</p>
+                <p>Sakit: {stats.detailKehadiran.sakit}</p>
+                <p>Izin: {stats.detailKehadiran.izin}</p>
+                <p>Alpa: {stats.detailKehadiran.alpa}</p>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
   };
 
   return (
     <div className="p-6 bg-gradient-to-br from-slate-900 to-indigo-950 min-h-screen">
-      <h1 className="text-2xl font-bold mb-6 text-white">Rekap Kehadiran Siswa</h1>
+      <h1 className="text-2xl font-bold mb-6 text-white">
+        Rekap Kehadiran Siswa
+      </h1>
 
       <div className="bg-slate-800/50 p-6 rounded-lg shadow-lg backdrop-blur-sm mb-6 border border-slate-700">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
@@ -140,7 +184,7 @@ export default function AttendancePage() {
             onChange={handleFilterChange}
             className="bg-slate-900 border-slate-700 text-white p-2 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           >
-            <option value="">Pilih Kelas</option>
+            <option value="">Semua Kelas</option>
             {kelas.map((k) => (
               <option key={k} value={k}>
                 Kelas {k}
@@ -157,6 +201,8 @@ export default function AttendancePage() {
         )}
       </div>
 
+      {renderStatistikKelas()}
+
       {loading ? (
         <div className="text-center py-4 text-white">Loading...</div>
       ) : (
@@ -169,6 +215,9 @@ export default function AttendancePage() {
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
                   NISN
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
+                  Kelas
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-slate-400 uppercase tracking-wider">
                   Hadir
@@ -191,41 +240,44 @@ export default function AttendancePage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-700">
-              {attendanceData.length > 0 ? (
-                attendanceData.map((attendance) => (
-                  <tr key={attendance._id} className="text-slate-300">
+              {rekapData.rekapKehadiran?.length > 0 ? (
+                rekapData.rekapKehadiran.map((rekap) => (
+                  <tr key={rekap.siswa.id} className="text-slate-300">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {attendance.siswaId.nama}
+                      {rekap.siswa.nama}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {attendance.siswaId.nisn}
+                      {rekap.siswa.nisn}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {rekap.siswa.kelas}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      {attendance.totalHadir}
+                      {rekap.kehadiran.hadir}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      {attendance.totalSakit}
+                      {rekap.kehadiran.sakit}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      {attendance.totalIzin}
+                      {rekap.kehadiran.izin}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      {attendance.totalAlpa}
+                      {rekap.kehadiran.alpa}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      {attendance.totalHariEfektif}
+                      {rekap.kehadiran.totalHariEfektif}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
-                      {calculatePercentage(
-                        attendance.totalHadir,
-                        attendance.totalHariEfektif
-                      )}
+                      {rekap.kehadiran.persentase}%
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan={8} className="px-6 py-4 text-center text-slate-400">
+                  <td
+                    colSpan={9}
+                    className="px-6 py-4 text-center text-slate-400"
+                  >
                     Tidak ada data kehadiran untuk filter yang dipilih
                   </td>
                 </tr>

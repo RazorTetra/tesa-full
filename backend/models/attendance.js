@@ -9,50 +9,51 @@ const AttendanceSchema = new mongoose.Schema(
       required: true,
     },
     semester: {
-      type: Number, // 1 atau 2
+      type: Number,
       required: true,
+      enum: [1, 2],
     },
     tahunAjaran: {
-      type: String, // format: "2023/2024"
+      type: String,
       required: true,
     },
     totalHadir: {
       type: Number,
       default: 0,
+      min: 0,
     },
     totalSakit: {
       type: Number,
       default: 0,
+      min: 0,
     },
     totalIzin: {
       type: Number,
       default: 0,
+      min: 0,
     },
     totalAlpa: {
       type: Number,
       default: 0,
+      min: 0,
     },
     totalHariEfektif: {
       type: Number,
       required: true,
+      min: 1,
     },
     persentaseKehadiran: {
       type: Number,
       default: 0,
-    }
+      min: 0,
+      max: 100,
+      set: (v) => Math.round(v * 100) / 100, // format persentase
+    },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+  }
 );
 
-// Middleware untuk menghitung persentase kehadiran sebelum save
-AttendanceSchema.pre('save', function(next) {
-  const totalHadir = this.totalHadir || 0;
-  const totalHariEfektif = this.totalHariEfektif || 1; // Hindari pembagian dengan 0
-  
-  this.persentaseKehadiran = (totalHadir / totalHariEfektif) * 100;
-  next();
-});
-
-const Attendance = mongoose.models.Attendance || mongoose.model("Attendance", AttendanceSchema);
-
-module.exports = Attendance;
+module.exports =
+  mongoose.models.Attendance || mongoose.model("Attendance", AttendanceSchema);
