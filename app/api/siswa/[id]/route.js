@@ -30,7 +30,9 @@ export async function GET(request, context) {
   await connectDB();
   try {
     const params = await context.params;
-    const siswa = await Siswa.findById(params.id);
+    // Tambahkan populate untuk mendapatkan data user yang terkait
+    const siswa = await Siswa.findById(params.id)
+      .populate('userId', '-password'); // Exclude password field
     
     if (!siswa) {
       return NextResponse.json(
@@ -77,16 +79,16 @@ export async function PUT(request, context) {
       params.id,
       { ...body },
       { new: true, runValidators: true }
-    );
+    ).populate('userId', '-password'); // Tambahkan populate saat update
 
     // Jika ada userId, update juga data user yang terkait
     if (currentSiswa.userId) {
       await User.findByIdAndUpdate(
         currentSiswa.userId,
         {
-          nama: body.nama, // Sync nama
-          image: body.image || "/noavatar.png", // Sync image
-          imagePublicId: body.imagePublicId // Sync imagePublicId
+          nama: body.nama,
+          image: body.image || "/noavatar.png",
+          imagePublicId: body.imagePublicId
         },
         { new: true }
       );

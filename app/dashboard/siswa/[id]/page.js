@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import Image from "next/image";
-import { UserCog } from "lucide-react";
+import { UserCog, KeyRound } from "lucide-react";
 import Swal from "sweetalert2";
 import withReactContent from "sweetalert2-react-content";
 import styles from "@/app/ui/dashboard/master/addEdit.module.css";
@@ -26,8 +26,15 @@ const EditSiswaPage = () => {
     status: "",
     kelas: "",
     image: "/noavatar.png",
-    imagePublicId: "", 
+    imagePublicId: "",
+    userId: "", // Tambahkan field userId
   });
+  const [showPasswordSection, setShowPasswordSection] = useState(false);
+  const [passwordData, setPasswordData] = useState({
+    password: "",
+    confirmPassword: "",
+  });
+  const [passwordErrors, setPasswordErrors] = useState({});
 
   useEffect(() => {
     const fetchSiswa = async () => {
@@ -40,6 +47,7 @@ const EditSiswaPage = () => {
             ...data.data,
             image: data.data.image || "/noavatar.png",
             imagePublicId: data.data.imagePublicId || "",
+            userId: data.data.userId, // Pastikan userId tersimpan
           });
         } else {
           throw new Error(data.error || "Failed to fetch student data");
@@ -73,7 +81,12 @@ const EditSiswaPage = () => {
     setFormData((prev) => ({ ...prev, [name]: value }));
   }, []);
 
-  // Handle image upload
+  const handlePasswordChange = (e) => {
+    const { name, value } = e.target;
+    setPasswordData((prev) => ({ ...prev, [name]: value }));
+    setPasswordErrors((prev) => ({ ...prev, [name]: "" }));
+  };
+
   const handleImageUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -87,20 +100,13 @@ const EditSiswaPage = () => {
       return;
     }
 
-    if (!file.type.startsWith("image/")) {
-      MySwal.fire({
-        icon: "error",
-        title: "Error",
-        text: "File harus berupa gambar",
-      });
-      return;
-    }
-
     setIsImageUploading(true);
 
     try {
-      // Delete old image if exists
-      if (formData.imagePublicId && formData.imagePublicId !== "tesa_skripsi/defaults/no-avatar") {
+      if (
+        formData.imagePublicId &&
+        formData.imagePublicId !== "tesa_skripsi/defaults/no-avatar"
+      ) {
         await fetch("/api/upload/delete", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -121,7 +127,6 @@ const EditSiswaPage = () => {
       const data = await response.json();
 
       if (data.success) {
-        // Update both siswa and corresponding user data
         const siswaResponse = await fetch(`/api/siswa/${params.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -135,20 +140,19 @@ const EditSiswaPage = () => {
         const siswaData = await siswaResponse.json();
 
         if (siswaData.success) {
-          setFormData(prev => ({
+          setFormData((prev) => ({
             ...prev,
             image: data.fileName,
-            imagePublicId: data.publicId
+            imagePublicId: data.publicId,
           }));
 
-          // Update user data if siswa has a userId
-          if (siswaData.data.userId) {
-            await fetch(`/api/user/${siswaData.data.userId}`, {
+          if (formData.userId) {
+            await fetch(`/api/user/${formData.userId}`, {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 image: data.fileName,
-                imagePublicId: data.publicId
+                imagePublicId: data.publicId,
               }),
             });
           }
@@ -158,11 +162,8 @@ const EditSiswaPage = () => {
             title: "Berhasil",
             text: "Foto profil berhasil diperbarui",
             timer: 1500,
-            showConfirmButton: false,
           });
         }
-      } else {
-        throw new Error(data.error || "Gagal mengupload gambar");
       }
     } catch (error) {
       console.error("Upload error:", error);
@@ -177,37 +178,100 @@ const EditSiswaPage = () => {
     }
   };
 
-
-  // Form validation
   const validateForm = useCallback(() => {
     const newErrors = {};
 
-    if (!formData.nama.trim()) {
-      newErrors.nama = "Nama harus diisi";
-    }
-
+    if (!formData.nama.trim()) newErrors.nama = "Nama harus diisi";
     if (!formData.nisn) {
       newErrors.nisn = "NISN harus diisi";
     } else if (formData.nisn.length !== 10) {
       newErrors.nisn = "NISN harus 10 digit";
     }
-
-    if (!formData.alamat.trim()) {
-      newErrors.alamat = "Alamat harus diisi";
-    }
-
-    if (!formData.status) {
-      newErrors.status = "Status harus dipilih";
-    }
-
-    if (!formData.kelas) {
-      newErrors.kelas = "Kelas harus dipilih";
-    }
+    if (!formData.alamat.trim()) newErrors.alamat = "Alamat harus diisi";
+    if (!formData.status) newErrors.status = "Status harus dipilih";
+    if (!formData.kelas) newErrors.kelas = "Kelas harus dipilih";
 
     return newErrors;
   }, [formData]);
 
-  // Handle form submission
+  const validatePassword = () => {
+    const errors = {};
+    if (passwordData.password) {
+      if (passwordData.password.length < 6) {
+        errors.password = "Password minimal 6 karakter";
+      }
+      if (passwordData.password !== passwordData.confirmPassword) {
+        errors.confirmPassword = "Password tidak cocok";
+      }
+    }
+    return errors;
+  };
+
+  const handleUpdatePassword = async () => {
+    const validationErrors = validatePassword();
+    if (Object.keys(validationErrors).length > 0) {
+      setPasswordErrors(validationErrors);
+      return;
+    }
+  
+    try {
+      const result = await MySwal.fire({
+        title: "Konfirmasi Update Password",
+        text: "Apakah Anda yakin ingin mengubah password?",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonText: "Ya, Ubah",
+        cancelButtonText: "Batal",
+      });
+  
+      if (!result.isConfirmed) return;
+  
+      setIsSubmitting(true);
+  
+      // Ambil userId string dari objek user
+      const userId = formData.userId._id || formData.userId;
+  
+      const response = await fetch(`/api/user/${userId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nama: formData.nama,
+          email: `siswa${formData.nisn}@smpadventtompaso.com`,
+          phone: "000000000000",
+          pengguna: "user",
+          image: formData.image,
+          imagePublicId: formData.imagePublicId,
+          password: passwordData.password
+        }),
+      });
+  
+      const data = await response.json();
+  
+      if (data.success) {
+        MySwal.fire({
+          icon: "success",
+          title: "Berhasil",
+          text: "Password berhasil diperbarui",
+          timer: 1500,
+        });
+        
+        setPasswordData({ password: "", confirmPassword: "" });
+        setShowPasswordSection(false);
+      } else {
+        throw new Error(data.error || "Gagal memperbarui password");
+      }
+    } catch (error) {
+      console.error("Password update error:", error);
+      MySwal.fire({
+        icon: "error",
+        title: "Gagal",
+        text: error.message,
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     const validationErrors = validateForm();
@@ -227,8 +291,6 @@ const EditSiswaPage = () => {
       text: "Data siswa akan diperbarui",
       icon: "warning",
       showCancelButton: true,
-      confirmButtonColor: "#3085d6",
-      cancelButtonColor: "#d33",
       confirmButtonText: "Ya, perbarui",
       cancelButtonText: "Batal",
     });
@@ -237,7 +299,6 @@ const EditSiswaPage = () => {
       setIsSubmitting(true);
 
       try {
-        // Update siswa data
         const siswaResponse = await fetch(`/api/siswa/${params.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -247,15 +308,14 @@ const EditSiswaPage = () => {
         const siswaData = await siswaResponse.json();
 
         if (siswaData.success) {
-          // Update corresponding user data
-          if (siswaData.data.userId) {
-            await fetch(`/api/user/${siswaData.data.userId}`, {
+          if (formData.userId) {
+            await fetch(`/api/user/${formData.userId}`, {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 nama: formData.nama,
                 image: formData.image,
-                imagePublicId: formData.imagePublicId
+                imagePublicId: formData.imagePublicId,
               }),
             });
           }
@@ -265,9 +325,8 @@ const EditSiswaPage = () => {
             title: "Berhasil!",
             text: "Data siswa berhasil diperbarui",
             timer: 2000,
-            showConfirmButton: false,
           });
-          
+
           router.push("/dashboard/siswa");
           router.refresh();
         } else {
@@ -285,26 +344,14 @@ const EditSiswaPage = () => {
     }
   };
 
-  const handleImageClick = () => {
-    if (!isImageUploading) {
-      document.getElementById("file-input").click();
-    }
-  };
-
   if (isLoading) {
     return <div className={styles.loading}>Loading...</div>;
   }
 
   return (
-    <div className={`${styles.container} ${styles.fadeIn}`}>
+    <div className={styles.container}>
       <div className={styles.infoContainer}>
-        <div
-          className={`${styles.imgContainer} ${
-            isImageUploading ? styles.uploading : ""
-          }`}
-          onClick={handleImageClick}
-          style={{ cursor: isImageUploading ? "wait" : "pointer" }}
-        >
+        <div className={styles.imgContainer}>
           <Image
             src={formData.image}
             width={200}
@@ -312,6 +359,9 @@ const EditSiswaPage = () => {
             alt="Foto Siswa"
             className={styles.avatar}
             priority
+            onClick={() =>
+              !isImageUploading && document.getElementById("file-input").click()
+            }
           />
           <input
             id="file-input"
@@ -330,42 +380,33 @@ const EditSiswaPage = () => {
         <p className={styles.description}>
           {isImageUploading
             ? "Mengupload foto..."
-            : "Klik gambar di atas untuk mengubah foto profil"}
+            : "Klik gambar untuk mengubah foto"}
         </p>
-        {imageError && (
-          <p className={styles.errorText}>
-            Gagal memuat gambar. Silakan coba upload ulang.
-          </p>
-        )}
       </div>
 
-      <div className={`${styles.formContainer} ${styles.fadeIn}`}>
+      <div className={styles.formContainer}>
         <form onSubmit={handleSubmit} className={styles.form}>
           <div className={styles.inputGroup}>
-            <label htmlFor="nama">Nama Lengkap</label>
+            <label>Nama Lengkap</label>
             <input
-              id="nama"
               type="text"
               name="nama"
               value={formData.nama}
               onChange={handleChange}
               className={errors.nama ? styles.inputError : styles.input}
-              placeholder="Masukkan nama lengkap"
               disabled={isSubmitting}
             />
             {errors.nama && <span className={styles.error}>{errors.nama}</span>}
           </div>
 
           <div className={styles.inputGroup}>
-            <label htmlFor="nisn">NISN</label>
+            <label>NISN</label>
             <input
-              id="nisn"
               type="text"
               name="nisn"
               value={formData.nisn}
               onChange={handleChange}
               className={errors.nisn ? styles.inputError : styles.input}
-              placeholder="Masukkan 10 digit NISN"
               maxLength={10}
               disabled={isSubmitting}
             />
@@ -373,15 +414,13 @@ const EditSiswaPage = () => {
           </div>
 
           <div className={styles.inputGroup}>
-            <label htmlFor="alamat">Alamat</label>
+            <label>Alamat</label>
             <input
-              id="alamat"
               type="text"
               name="alamat"
               value={formData.alamat}
               onChange={handleChange}
               className={errors.alamat ? styles.inputError : styles.input}
-              placeholder="Masukkan alamat lengkap"
               disabled={isSubmitting}
             />
             {errors.alamat && (
@@ -390,9 +429,8 @@ const EditSiswaPage = () => {
           </div>
 
           <div className={styles.inputGroup}>
-            <label htmlFor="status">Status</label>
+            <label>Status</label>
             <select
-              id="status"
               name="status"
               value={formData.status}
               onChange={handleChange}
@@ -411,9 +449,8 @@ const EditSiswaPage = () => {
           </div>
 
           <div className={styles.inputGroup}>
-            <label htmlFor="kelas">Kelas</label>
+            <label>Kelas</label>
             <select
-              id="kelas"
               name="kelas"
               value={formData.kelas}
               onChange={handleChange}
@@ -433,9 +470,77 @@ const EditSiswaPage = () => {
             )}
           </div>
 
+          {/* Password Section */}
+          <div className="mt-8 p-4 bg-gray-50 rounded-lg">
+            <button
+              type="button"
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+              onClick={() => setShowPasswordSection(!showPasswordSection)}
+            >
+              <KeyRound size={20} />
+              {showPasswordSection ? "Batal Ubah Password" : "Ubah Password"}
+            </button>
+
+            {showPasswordSection && (
+              <div className="mt-4 space-y-4">
+                <div className={styles.inputGroup}>
+                  <label>Password Baru</label>
+                  <input
+                    type="password"
+                    name="password"
+                    value={passwordData.password}
+                    onChange={handlePasswordChange}
+                    className={
+                      passwordErrors.password ? styles.inputError : styles.input
+                    }
+                    placeholder="Minimal 6 karakter"
+                    disabled={isSubmitting}
+                  />
+                  {passwordErrors.password && (
+                    <span className={styles.error}>
+                      {passwordErrors.password}
+                    </span>
+                  )}
+                </div>
+
+                <div className={styles.inputGroup}>
+                  <label>Konfirmasi Password</label>
+                  <input
+                    type="password"
+                    name="confirmPassword"
+                    value={passwordData.confirmPassword}
+                    onChange={handlePasswordChange}
+                    className={
+                      passwordErrors.confirmPassword
+                        ? styles.inputError
+                        : styles.input
+                    }
+                    placeholder="Masukkan ulang password"
+                    disabled={isSubmitting}
+                  />
+                  {passwordErrors.confirmPassword && (
+                    <span className={styles.error}>
+                      {passwordErrors.confirmPassword}
+                    </span>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  className="flex items-center justify-center gap-2 w-full px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors disabled:bg-gray-400"
+                  onClick={handleUpdatePassword}
+                  disabled={isSubmitting}
+                >
+                  <KeyRound size={20} />
+                  {isSubmitting ? "Memperbarui Password..." : "Update Password"}
+                </button>
+              </div>
+            )}
+          </div>
+
           <button
             type="submit"
-            className={`${styles.button} ${styles.fadeIn}`}
+            className="flex items-center justify-center gap-2 w-full mt-6 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:bg-gray-400"
             disabled={isSubmitting || isImageUploading}
           >
             <UserCog size={20} />
