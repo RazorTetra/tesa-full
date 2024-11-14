@@ -20,10 +20,13 @@ const SingleUserPage = () => {
     email: "",
     phone: "",
     pengguna: "",
+    password: "",
+    confirmPassword: "",
   });
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -32,9 +35,7 @@ const SingleUserPage = () => {
       try {
         const response = await fetch(`/api/user/${params.id}`);
         if (!response.ok) {
-          throw new Error(
-            `HTTP error! status: ${response.status}`
-          );
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
         
         const data = await response.json();
@@ -46,6 +47,8 @@ const SingleUserPage = () => {
             email: data.data.email || "",
             phone: data.data.phone || "",
             pengguna: data.data.pengguna || "",
+            password: "",
+            confirmPassword: "",
           });
           setImage(data.data.image || "/noavatar.png");
         } else {
@@ -139,6 +142,17 @@ const SingleUserPage = () => {
     if (!formData.email) newErrors.email = "Email harus diisi";
     if (!formData.phone) newErrors.phone = "No. telp harus diisi";
     if (!formData.pengguna) newErrors.pengguna = "Pengguna harus dipilih";
+    
+    // Password validation
+    if (formData.password || formData.confirmPassword) {
+      if (formData.password.length < 6) {
+        newErrors.password = "Password minimal 6 karakter";
+      }
+      if (formData.password !== formData.confirmPassword) {
+        newErrors.confirmPassword = "Password tidak cocok";
+      }
+    }
+
     return newErrors;
   };
 
@@ -154,15 +168,25 @@ const SingleUserPage = () => {
     setIsSubmitting(true);
 
     try {
+      const updateData = {
+        nama: formData.nama,
+        email: formData.email,
+        phone: formData.phone,
+        pengguna: formData.pengguna,
+        image
+      };
+
+      // Only include password if it's been changed
+      if (formData.password) {
+        updateData.password = formData.password;
+      }
+
       const response = await fetch(`/api/user/${params.id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          ...formData,
-          image
-        }),
+        body: JSON.stringify(updateData),
       });
 
       if (!response.ok) {
@@ -283,6 +307,50 @@ const SingleUserPage = () => {
               <option value="user">User</option>
             </select>
             {errors.pengguna && <span className={styles.error}>{errors.pengguna}</span>}
+          </div>
+
+          <div className={styles.passwordSection}>
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className={styles.togglePassword}
+            >
+              {showPassword ? "Batal Ubah Password" : "Ubah Password"}
+            </button>
+
+            {showPassword && (
+              <>
+                <div className={styles.inputGroup}>
+                  <label className={styles.label}>Password Baru</label>
+                  <input
+                    type="password"
+                    name="password"
+                    value={formData.password}
+                    onChange={handleChange}
+                    className={errors.password ? styles.inputError : styles.input}
+                    disabled={isSubmitting}
+                    placeholder="Minimal 6 karakter"
+                  />
+                  {errors.password && <span className={styles.error}>{errors.password}</span>}
+                </div>
+
+                <div className={styles.inputGroup}>
+                  <label className={styles.label}>Konfirmasi Password</label>
+                  <input
+                    type="password"
+                    name="confirmPassword"
+                    value={formData.confirmPassword}
+                    onChange={handleChange}
+                    className={errors.confirmPassword ? styles.inputError : styles.input}
+                    disabled={isSubmitting}
+                    placeholder="Masukkan ulang password"
+                  />
+                  {errors.confirmPassword && (
+                    <span className={styles.error}>{errors.confirmPassword}</span>
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
           <button

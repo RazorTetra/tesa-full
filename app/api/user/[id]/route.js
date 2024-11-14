@@ -1,10 +1,11 @@
+// app/api/user/[id]/route.js
 import { NextResponse } from "next/server";
 import connectDB from "@/backend/config/database";
 import User from "@/backend/models/user";
 import Siswa from "@/backend/models/siswa";
+import bcrypt from "bcryptjs";
 import { v2 as cloudinary } from "cloudinary";
 
-// Fungsi untuk memastikan koneksi database
 const connectToDatabase = async () => {
   if (!global.mongoose) {
     global.mongoose = connectDB();
@@ -12,7 +13,6 @@ const connectToDatabase = async () => {
   await global.mongoose;
 };
 
-// Cara yang benar untuk mengakses params di Next.js 14
 export async function GET(request) {
   await connectToDatabase();
   try {
@@ -47,18 +47,30 @@ export async function PUT(request, context) {
     const params = await context.params;
     const body = await request.json();
     
-    // Update user
+    // Prepare update data
+    const updateData = {
+      nama: body.nama,
+      email: body.email,
+      phone: body.phone,
+      pengguna: body.pengguna,
+      image: body.image || "/noavatar.png",
+      imagePublicId: body.imagePublicId
+    };
+
+    // If password is provided, hash it
+    if (body.password) {
+      const salt = await bcrypt.genSalt(10);
+      updateData.password = await bcrypt.hash(body.password, salt);
+    }
+
+    // Update user with runValidators to ensure data validity
     const updatedUser = await User.findByIdAndUpdate(
       params.id,
-      {
-        nama: body.nama,
-        email: body.email,
-        phone: body.phone,
-        pengguna: body.pengguna,
-        image: body.image || "/noavatar.png",
-        imagePublicId: body.imagePublicId
-      },
-      { new: true }
+      updateData,
+      { 
+        new: true, 
+        runValidators: true 
+      }
     ).select("-password");
 
     if (!updatedUser) {
