@@ -82,6 +82,71 @@ const GuruPage = () => {
     });
   };
 
+  const handleDelete = async (id) => {
+    try {
+      const result = await MySwal.fire({
+        title: "Apakah anda yakin?",
+        text: "Data guru akan dihapus permanen",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonColor: "#d33",
+        cancelButtonColor: "#3085d6", 
+        confirmButtonText: "Ya, hapus",
+        cancelButtonText: "Batal"
+      });
+  
+      if (result.isConfirmed) {
+        // Dapatkan data guru untuk mengambil imagePublicId
+        const guruToDelete = guru.find(g => g._id === id);
+  
+        // Hapus foto dari Cloudinary jika bukan default
+        if (guruToDelete?.imagePublicId && guruToDelete.imagePublicId !== "tesa_skripsi/defaults/no-avatar") {
+          try {
+            await fetch("/api/upload/delete", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                publicId: guruToDelete.imagePublicId,
+              }),
+            });
+          } catch (error) {
+            console.warn("Error deleting image:", error);
+          }
+        }
+  
+        // Hapus data guru
+        const response = await fetch(`/api/guru/${id}`, {
+          method: "DELETE",
+        });
+  
+        const data = await response.json();
+  
+        if (data.success) {
+          // Update state untuk refresh list
+          setGuru(prevGuru => prevGuru.filter(g => g._id !== id));
+          setFilteredGuru(prevFiltered => prevFiltered.filter(g => g._id !== id));
+  
+          showNotification(
+            "success",
+            "Berhasil",
+            "Data guru berhasil dihapus"
+          );
+        } else {
+          throw new Error(data.error || "Gagal menghapus data guru");
+        }
+      }
+    } catch (error) {
+      console.error("Delete error:", error);
+      showNotification(
+        "error",
+        "Gagal",
+        error.message || "Terjadi kesalahan saat menghapus data"
+      );
+    }
+  };
+
   if (isLoading) {
     return <div className={styles.loading}>Memuat data...</div>;
   }
