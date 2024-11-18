@@ -1,5 +1,4 @@
-// backend/models/tahunAjaran.js
-const mongoose = require("mongoose");
+import mongoose from 'mongoose';
 
 const TahunAjaranSchema = new mongoose.Schema(
   {
@@ -9,7 +8,6 @@ const TahunAjaranSchema = new mongoose.Schema(
       unique: true,
       validate: {
         validator: function (v) {
-          // Format: "2023/2024"
           return /^\d{4}\/\d{4}$/.test(v);
         },
         message: (props) =>
@@ -42,7 +40,6 @@ const TahunAjaranSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Validasi tanggal
 TahunAjaranSchema.pre("save", function (next) {
   if (this.tanggalMulai >= this.tanggalSelesai) {
     next(new Error("Tanggal mulai harus lebih awal dari tanggal selesai"));
@@ -50,7 +47,6 @@ TahunAjaranSchema.pre("save", function (next) {
   next();
 });
 
-// Hanya boleh ada satu tahun ajaran aktif
 TahunAjaranSchema.pre("save", async function (next) {
   if (this.isActive) {
     await this.constructor.updateMany(
@@ -61,7 +57,8 @@ TahunAjaranSchema.pre("save", async function (next) {
   next();
 });
 
-// Cek apakah model sudah didefinisikan
-module.exports =
-  mongoose.models.TahunAjaran ||
+const TahunAjaran = mongoose.models.TahunAjaran || 
   mongoose.model("TahunAjaran", TahunAjaranSchema);
+export const deleteMany = () => TahunAjaran.deleteMany();
+export const insertMany = (data) => TahunAjaran.insertMany(data);
+export default TahunAjaran;

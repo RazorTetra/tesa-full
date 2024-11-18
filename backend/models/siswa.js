@@ -34,7 +34,7 @@ const SiswaSchema = new mongoose.Schema({
   userId: { 
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: true,
+    required: false, // Ubah ke false untuk seeding
     index: true
   }
 }, {
@@ -49,7 +49,7 @@ SiswaSchema.index({ userId: 1 }, { unique: true });
 
 // Middleware pre-save untuk validasi
 SiswaSchema.pre('save', async function(next) {
-  if (this.isNew) {
+  if (this.isNew && this.userId) { // Tambahkan check userId
     const siswa = this;
     try {
       // Cek duplikasi NISN
@@ -58,11 +58,13 @@ SiswaSchema.pre('save', async function(next) {
         throw new Error('NISN sudah terdaftar');
       }
       
-      // Cek keberadaan user
-      const User = mongoose.model('User');
-      const user = await User.findById(siswa.userId);
-      if (!user) {
-        throw new Error('User tidak ditemukan');
+      // Cek keberadaan user hanya jika userId ada
+      if (siswa.userId) {
+        const User = mongoose.model('User');
+        const user = await User.findById(siswa.userId);
+        if (!user) {
+          throw new Error('User tidak ditemukan');
+        }
       }
       
       next();
@@ -75,5 +77,9 @@ SiswaSchema.pre('save', async function(next) {
 });
 
 const Siswa = mongoose.models.Siswa || mongoose.model('Siswa', SiswaSchema);
+
+// Export fungsi untuk seeder
+export const deleteMany = () => Siswa.deleteMany();
+export const insertMany = (data) => Siswa.insertMany(data);
 
 export default Siswa;

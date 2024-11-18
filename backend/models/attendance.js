@@ -1,5 +1,4 @@
-// backend/models/attendance.js
-const mongoose = require("mongoose");
+import mongoose from 'mongoose';
 
 const AttendanceSchema = new mongoose.Schema(
   {
@@ -47,7 +46,7 @@ const AttendanceSchema = new mongoose.Schema(
       default: 0,
       min: 0,
       max: 100,
-      set: (v) => Math.round(v * 100) / 100, // format persentase
+      set: (v) => Math.round(v * 100) / 100,
     },
   },
   {
@@ -55,5 +54,7 @@ const AttendanceSchema = new mongoose.Schema(
   }
 );
 
-module.exports =
-  mongoose.models.Attendance || mongoose.model("Attendance", AttendanceSchema);
+const Attendance = mongoose.models.Attendance || mongoose.model("Attendance", AttendanceSchema);
+export const deleteMany = () => Attendance.deleteMany();
+export const insertMany = (data) => Attendance.insertMany(data);
+export default Attendance;

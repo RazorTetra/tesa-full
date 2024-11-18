@@ -1,4 +1,4 @@
-const mongoose = require("mongoose");
+import mongoose from 'mongoose';
 
 const SiswaMutasiKeluarSchema = new mongoose.Schema(
   {
@@ -15,8 +15,8 @@ const SiswaMutasiKeluarSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-const SiswaMutasiKeluar =
-  mongoose.models.SiswaMutasiKeluar ||
+const SiswaMutasiKeluar = mongoose.models.SiswaMutasiKeluar || 
   mongoose.model("SiswaMutasiKeluar", SiswaMutasiKeluarSchema);
-
-module.exports = SiswaMutasiKeluar;
+export const deleteMany = () => SiswaMutasiKeluar.deleteMany();
+export const insertMany = (data) => SiswaMutasiKeluar.insertMany(data);
+export default SiswaMutasiKeluar;

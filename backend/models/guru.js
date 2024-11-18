@@ -1,4 +1,4 @@
-const mongoose = require("mongoose");
+import mongoose from 'mongoose';
 
 const GuruSchema = new mongoose.Schema({
   nama: { type: String, required: true },
@@ -10,4 +10,8 @@ const GuruSchema = new mongoose.Schema({
 });
 
 const Guru = mongoose.models.Guru || mongoose.model("Guru", GuruSchema);
-module.exports = Guru;
+
+// Export model dan operasi yang dibutuhkan seeder
+export const deleteMany = () => Guru.deleteMany();
+export const insertMany = (data) => Guru.insertMany(data);
+export default Guru;
