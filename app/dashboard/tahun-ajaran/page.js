@@ -20,6 +20,56 @@ export default function TahunAjaranPage() {
     isActive: false,
   });
 
+  const handleDelete = async (id, isActive) => {
+    try {
+      // Cek jika tahun ajaran aktif
+      if (isActive) {
+        MySwal.fire({
+          icon: "error",
+          title: "Tidak Dapat Menghapus",
+          text: "Tahun ajaran yang sedang aktif tidak dapat dihapus",
+        });
+        return;
+      }
+
+      const result = await MySwal.fire({
+        title: "Apakah Anda yakin?",
+        text: "Data yang dihapus tidak dapat dikembalikan!",
+        icon: "warning",
+        showCancelButton: true,
+        confirmButtonColor: "#d33",
+        cancelButtonColor: "#3085d6",
+        confirmButtonText: "Ya, hapus!",
+        cancelButtonText: "Batal",
+      });
+
+      if (result.isConfirmed) {
+        const response = await fetch(`/api/tahun-ajaran/${id}`, {
+          method: "DELETE",
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          MySwal.fire({
+            icon: "success",
+            title: "Berhasil",
+            text: "Tahun ajaran berhasil dihapus",
+          });
+          fetchTahunAjaran(); // Refresh data
+        } else {
+          throw new Error(data.error);
+        }
+      }
+    } catch (error) {
+      MySwal.fire({
+        icon: "error",
+        title: "Gagal",
+        text: error.message || "Gagal menghapus tahun ajaran",
+      });
+    }
+  };
+
   const fetchTahunAjaran = async () => {
     try {
       setError(null);
@@ -411,14 +461,25 @@ export default function TahunAjaranPage() {
                       </span>
                     </td>
                     <td className="px-6 py-4">
-                      {!ta.isActive && (
+                      <div className="flex gap-2">
+                        {!ta.isActive && (
+                          <button
+                            onClick={() => handleActivate(ta._id)}
+                            className="text-blue-400 hover:text-blue-300 transition duration-150"
+                          >
+                            Aktifkan
+                          </button>
+                        )}
                         <button
-                          onClick={() => handleActivate(ta._id)}
-                          className="text-blue-400 hover:text-blue-300 transition duration-150"
+                          onClick={() => handleDelete(ta._id, ta.isActive)}
+                          className={`text-red-400 hover:text-red-300 transition duration-150 ${
+                            ta.isActive ? "opacity-50 cursor-not-allowed" : ""
+                          }`}
+                          disabled={ta.isActive}
                         >
-                          Aktifkan
+                          Hapus
                         </button>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 ))}

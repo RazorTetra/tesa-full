@@ -2,6 +2,8 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/backend/config/database";
 import TahunAjaran from "@/backend/models/tahunAjaran";
+import Absen from "@/backend/models/absen";
+import Attendance from "@/backend/models/attendance";
 
 export async function PUT(request, { params }) {
   try {
@@ -74,6 +76,80 @@ export async function PUT(request, { params }) {
       );
     }
 
+    return NextResponse.json(
+      { success: false, error: error.message },
+      { status: 500 }
+    );
+  }
+}
+
+// Delete tahun ajaran
+export async function DELETE(request, { params }) {
+  try {
+    await connectDB();
+    const { id } = params;
+
+    // Cek keberadaan tahun ajaran
+    const tahunAjaran = await TahunAjaran.findById(id);
+    if (!tahunAjaran) {
+      return NextResponse.json(
+        { success: false, error: "Tahun ajaran tidak ditemukan" },
+        { status: 404 }
+      );
+    }
+
+    // Cek apakah tahun ajaran sedang aktif
+    if (tahunAjaran.isActive) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Tidak dapat menghapus tahun ajaran yang sedang aktif",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Cek apakah ada data absensi yang terkait
+    const absenCount = await Absen.countDocuments({
+      tahunAjaran: tahunAjaran.tahunAjaran,
+    });
+
+    if (absenCount > 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Tidak dapat menghapus tahun ajaran yang memiliki data absensi",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Cek apakah ada data attendance yang terkait
+    const attendanceCount = await Attendance.countDocuments({
+      tahunAjaran: tahunAjaran.tahunAjaran,
+    });
+
+    if (attendanceCount > 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Tidak dapat menghapus tahun ajaran yang memiliki data kehadiran",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Hapus tahun ajaran
+    await TahunAjaran.findByIdAndDelete(id);
+
+    return NextResponse.json({
+      success: true,
+      message: "Tahun ajaran berhasil dihapus",
+    });
+  } catch (error) {
+    console.error("Error in tahun ajaran delete route:", error);
     return NextResponse.json(
       { success: false, error: error.message },
       { status: 500 }
