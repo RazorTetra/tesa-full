@@ -151,14 +151,13 @@ const calculateChange = (currentValue, type) => {
 
 // =============== Components ===============
 
-function Card({ title, value, change, isHovered }) {
-  const isPositive = change >= 0;
+function Card({ title, value, isHovered }) {
   return (
     <motion.div
       className={`p-6 rounded-2xl shadow-lg transition-all duration-300 bg-gradient-to-br ${
         isHovered
-          ? "from-indigo-500 to-purple-400"
-          : "from-indigo-950 to-slate-900"
+          ? "from-indigo-500 to-purple-400"  // Gradient saat hover
+          : "from-indigo-950 to-slate-900"   // Gradient default
       } backdrop-blur-md bg-opacity-60`}
       whileHover={{
         scale: 1.05,
@@ -169,21 +168,13 @@ function Card({ title, value, change, isHovered }) {
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-semibold text-white">{title}</h2>
       </div>
-      <div className="text-4xl font-bold mb-2 text-white">
+      <div className="text-4xl font-bold text-white">
         {value.toLocaleString()}
-      </div>
-      <div
-        className={`flex items-center ${
-          isPositive ? "text-green-300" : "text-red-300"
-        }`}
-      >
-        <span>{isPositive ? "↑" : "↓"}</span>
-        <span className="ml-1">{Math.abs(change)}%</span>
-        <span className="ml-1 text-gray-200">dari semester lalu</span>
       </div>
     </motion.div>
   );
 }
+
 
 // Function Table
 function Table({ students, attendanceData, tahunAjaranAktif }) {
@@ -191,29 +182,28 @@ function Table({ students, attendanceData, tahunAjaranAktif }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [showAll, setShowAll] = useState(false);
   
-  // Filter dan calculate data siswa dengan persentase kehadiran
+  // Tambahkan SWR untuk data attendance
+  const { data: attendanceStats } = useSWR(
+    tahunAjaranAktif 
+      ? `/api/attendance?semester=${tahunAjaranAktif.semester}&tahunAjaran=${tahunAjaranAktif.tahunAjaran}` 
+      : null,
+    fetcher
+  );
+  
+  // Filter dan process data siswa dengan persentase kehadiran dari model Attendance
   const processedStudents = useMemo(() => {
-    if (!students || !attendanceData?.data) return [];
+    if (!students || !attendanceStats?.data) return [];
     
     return students
       .map(student => {
-        // Filter absensi untuk siswa ini
-        const studentAttendance = attendanceData.data.filter(
+        // Cari data attendance untuk siswa ini
+        const studentAttendance = attendanceStats.data.find(
           record => record.siswaId._id === student._id
         );
 
-        // Hitung total per kategori
-        const totalHadir = studentAttendance.filter(a => a.keterangan === 'HADIR').length;
-        const totalAbsensi = studentAttendance.length;
-
-        // Hitung persentase kehadiran
-        const attendancePercentage = totalAbsensi > 0 
-          ? (totalHadir / totalAbsensi) * 100 
-          : 0;
-
         return {
           ...student,
-          attendancePercentage
+          attendancePercentage: studentAttendance?.persentaseKehadiran || 0
         };
       })
       .filter(student => 
@@ -221,7 +211,7 @@ function Table({ students, attendanceData, tahunAjaranAktif }) {
         student.kelas.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.nisn?.toLowerCase().includes(searchQuery.toLowerCase())
       );
-  }, [students, attendanceData, searchQuery]);
+  }, [students, attendanceStats, searchQuery]);
 
   // Tampilkan 5 data atau semua data
   const displayedStudents = showAll ? processedStudents : processedStudents.slice(0, 5);
@@ -363,46 +353,35 @@ function SubjectCard({ subject, attendanceData, onViewAttendance }) {
 export default function Dashboard() {
   const { data: session } = useSession();
   const isAdmin = session?.user?.role === "admin";
-
   const [hoveredCard, setHoveredCard] = useState(null);
   const [dailyAttendanceData, setDailyAttendanceData] = useState({});
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [tahunAjaranAktif, setTahunAjaranAktif] = useState(null);
-
-  // SWR Configuration
-  const swrOptions = {
-    refreshInterval: 300000,
-    revalidateOnFocus: false,
-    dedupingInterval: 180000,
+ 
+  // Config untuk data statis (guru, siswa, mutasi)
+  const staticConfig = {
+    refreshInterval: 900000,     // 15 menit 
+    revalidateOnFocus: false,    
+    dedupingInterval: 600000,    // 10 menit cache
+    errorRetryCount: 2
   };
-
-  // Data Fetching
-  const { data: tahunAjaranData } = useSWR(
-    "/api/tahun-ajaran/active",
-    fetcher,
-    swrOptions
-  );
-  const { data: studentsData, error: studentsError } = useSWR(
-    "/api/siswa",
-    fetcher,
-    swrOptions
-  );
-  const { data: teachersData, error: teachersError } = useSWR(
-    "/api/guru",
-    fetcher,
-    swrOptions
-  );
-  const { data: mutasiMasukData, error: mutasiMasukError } = useSWR(
-    "/api/siswaMutasiMasuk",
-    fetcher,
-    swrOptions
-  );
-  const { data: mutasiKeluarData, error: mutasiKeluarError } = useSWR(
-    "/api/siswaMutasiKeluar",
-    fetcher,
-    swrOptions
-  );
-
+ 
+  // Config untuk absensi (data realtime)
+  const realtimeConfig = {
+    refreshInterval: 300000,    // 5 menit
+    revalidateOnFocus: false,
+    dedupingInterval: 180000,   // 3 menit cache
+    errorRetryCount: 2
+  };
+ 
+  // Data statis
+  const { data: tahunAjaranData } = useSWR("/api/tahun-ajaran/active", fetcher, staticConfig);
+  const { data: studentsData, error: studentsError } = useSWR("/api/siswa", fetcher, staticConfig);
+  const { data: teachersData, error: teachersError } = useSWR("/api/guru", fetcher, staticConfig); 
+  const { data: mutasiMasukData, error: mutasiMasukError } = useSWR("/api/siswaMutasiMasuk", fetcher, staticConfig);
+  const { data: mutasiKeluarData, error: mutasiKeluarError } = useSWR("/api/siswaMutasiKeluar", fetcher, staticConfig);
+ 
+  // Data realtime (absensi)
   const {
     data: absenData,
     error: absenError,
@@ -413,7 +392,7 @@ export default function Dashboard() {
       : null,
     fetcher,
     {
-      ...swrOptions,
+      ...realtimeConfig,
       onSuccess: (data) => {
         if (data?.success) {
           const processedData = processAttendanceData(data, tahunAjaranAktif);
@@ -422,44 +401,31 @@ export default function Dashboard() {
       },
     }
   );
-
+ 
   // Set tahun ajaran aktif when data is loaded
   useEffect(() => {
     if (tahunAjaranData?.success) {
       setTahunAjaranAktif(tahunAjaranData.data);
     }
   }, [tahunAjaranData]);
-
-  const isLoading =
-    !studentsData ||
-    !teachersData ||
-    !mutasiMasukData ||
-    !mutasiKeluarData ||
-    !absenData;
-
+ 
+  const isLoading = !studentsData || !teachersData || !mutasiMasukData || !mutasiKeluarData || !absenData;
+ 
   // Error Handling
-  if (
-    studentsError ||
-    teachersError ||
-    mutasiMasukError ||
-    mutasiKeluarError ||
-    absenError
-  ) {
+  if (studentsError || teachersError || mutasiMasukError || mutasiKeluarError || absenError) {
     MySwal.fire({
-      icon: "error",
+      icon: "error", 
       title: "Error",
       text: "Gagal mengambil data",
       toast: true,
-      position: "top-end",
+      position: "top-end", 
       showConfirmButton: false,
       timer: 3000,
       timerProgressBar: true,
     });
   }
-
-  if (isLoading) {
-    return <LoadingIndicator />;
-  }
+ 
+  if (isLoading) return <LoadingIndicator />;
 
   // Attendance Handling
   const handleViewAttendance = (subject, attendanceData) => {
