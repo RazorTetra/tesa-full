@@ -4,12 +4,13 @@ import connectDB from "@/backend/config/database";
 import TahunAjaran from "@/backend/models/tahunAjaran";
 import Attendance from "@/backend/models/attendance";
 import Siswa from "@/backend/models/siswa";
+import Absen from "@/backend/models/absen";
 import mongoose from "mongoose";
 
 export async function PUT(request, { params }) {
   try {
     await connectDB();
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
 
     // Jika request untuk mengaktifkan tahun ajaran
@@ -89,7 +90,6 @@ export async function PUT(request, { params }) {
   }
 }
 
-// app/api/tahun-ajaran/[id]/route.js
 export async function DELETE(request, { params }) {
   try {
     await connectDB();
