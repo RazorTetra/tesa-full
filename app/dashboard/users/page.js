@@ -1,94 +1,101 @@
+// app/dashboard/users/page.js
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { Search, UserPlus } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Search, UserPlus, ChevronLeft, ChevronRight } from "lucide-react";
 import Swal from "sweetalert2";
 import withReactContent from "sweetalert2-react-content";
 import styles from "@/app/ui/dashboard/master/master.module.css";
 
 const MySwal = withReactContent(Swal);
+const ITEMS_PER_PAGE = 10;
 
 export default function UserPage() {
   const [users, setUsers] = useState([]);
   const [filteredUsers, setFilteredUsers] = useState([]);
   const [hoveredRow, setHoveredRow] = useState(null);
-  const [error, setError] = useState(null);
-  const [successMessage, setSuccessMessage] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const router = useRouter();
 
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const response = await fetch("/api/user");
-        if (!response.ok) {
-          throw new Error("Gagal mengambil data pengguna");
-        }
-        const data = await response.json();
-        if (data.success) {
-          setUsers(data.data);
-          setFilteredUsers(data.data);
-        } else {
-          showError(data.error || "Gagal mengambil data pengguna");
-        }
-      } catch (error) {
-        console.error("Error mengambil data pengguna:", error);
-        showError("Error mengambil data pengguna: " + error.message);
+  const fetchUsers = useCallback(async () => {
+    try {
+      const response = await fetch("/api/user");
+      if (!response.ok) {
+        throw new Error("Gagal mengambil data pengguna");
       }
-    };
-    fetchUsers();
+      const data = await response.json();
+      if (data.success) {
+        setUsers(data.data);
+        setFilteredUsers(data.data);
+        setTotalPages(Math.ceil(data.data.length / ITEMS_PER_PAGE));
+      } else {
+        showError(data.error || "Gagal mengambil data pengguna");
+      }
+    } catch (error) {
+      console.error("Error mengambil data pengguna:", error);
+      showError("Error mengambil data pengguna: " + error.message);
+    }
   }, []);
 
   useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
+  useEffect(() => {
     const results = users.filter(
-      (u) => u.nama && u.nama.toLowerCase().includes(searchTerm.toLowerCase()),
+      (u) => u.nama && u.nama.toLowerCase().includes(searchTerm.toLowerCase())
     );
     setFilteredUsers(results);
+    setCurrentPage(1);
+    setTotalPages(Math.ceil(results.length / ITEMS_PER_PAGE));
   }, [searchTerm, users]);
 
   const handleDelete = async (id) => {
     try {
       const result = await MySwal.fire({
-        title: 'Anda yakin?',
+        title: "Anda yakin?",
         text: "Data yang dihapus tidak dapat dikembalikan!",
-        icon: 'warning',
+        icon: "warning",
         showCancelButton: true,
-        confirmButtonColor: '#d33',
-        cancelButtonColor: '#3085d6',
-        confirmButtonText: 'Ya, hapus!',
-        cancelButtonText: 'Batal'
+        confirmButtonColor: "#d33",
+        cancelButtonColor: "#3085d6",
+        confirmButtonText: "Ya, hapus!",
+        cancelButtonText: "Batal",
       });
-  
+
       if (result.isConfirmed) {
         const response = await fetch(`/api/user/${id}`, {
-          method: 'DELETE'
+          method: "DELETE",
         });
-  
+
         const data = await response.json();
-  
+
         if (data.success) {
           MySwal.fire(
-            'Terhapus!',
-            'Data pengguna berhasil dihapus.',
-            'success'
+            "Terhapus!",
+            "Data pengguna berhasil dihapus.",
+            "success"
           );
-          // Refresh data
+          fetchUsers(); // Refresh data
           router.refresh();
         } else {
           throw new Error(data.error);
         }
       }
     } catch (error) {
-      console.error('Error:', error);
+      console.error("Error:", error);
       MySwal.fire(
-        'Error!',
+        "Error!",
         `Gagal menghapus pengguna: ${error.message}`,
-        'error'
+        "error"
       );
     }
   };
-  
 
   const handleImageClick = (imageUrl, name) => {
     MySwal.fire({
@@ -111,15 +118,34 @@ export default function UserPage() {
     });
   };
 
-  const showSuccess = (message) => {
-    MySwal.fire({
-      icon: "success",
-      title: "Berhasil!",
-      text: message,
-      timer: 3000,
-      timerProgressBar: true,
-    });
-  };
+  const paginatedUsers = filteredUsers.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
+  const PaginationControls = ({ currentPage, totalPages, setCurrentPage }) => (
+    <div className="flex items-center justify-center gap-4 mt-6 pb-4">
+      <button
+        onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+        disabled={currentPage === 1}
+        className="flex items-center justify-center p-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      >
+        <ChevronLeft className="w-5 h-5" />
+      </button>
+
+      <span className="text-sm text-gray-600">
+        Halaman {currentPage} dari {totalPages}
+      </span>
+
+      <button
+        onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+        disabled={currentPage === totalPages}
+        className="flex items-center justify-center p-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+      >
+        <ChevronRight className="w-5 h-5" />
+      </button>
+    </div>
+  );
 
   return (
     <div className={styles.container}>
@@ -152,17 +178,19 @@ export default function UserPage() {
             </tr>
           </thead>
           <tbody>
-            {filteredUsers.length === 0 ? (
+            {paginatedUsers.length === 0 ? (
               <tr>
                 <td colSpan="5" className={styles.noData}>
                   Tidak ada data pengguna yang tersedia.
                 </td>
               </tr>
             ) : (
-              filteredUsers.map((u, index) => (
+              paginatedUsers.map((u, index) => (
                 <tr
                   key={u._id}
-                  className={`${styles.tableRow} ${hoveredRow === index ? styles.hovered : ""}`}
+                  className={`${styles.tableRow} ${
+                    hoveredRow === index ? styles.hovered : ""
+                  }`}
                   onMouseEnter={() => setHoveredRow(index)}
                   onMouseLeave={() => setHoveredRow(null)}
                 >
@@ -204,6 +232,13 @@ export default function UserPage() {
             )}
           </tbody>
         </table>
+        {filteredUsers.length > ITEMS_PER_PAGE && (
+          <PaginationControls
+            currentPage={currentPage}
+            totalPages={totalPages}
+            setCurrentPage={setCurrentPage}
+          />
+        )}{" "}
       </div>
     </div>
   );
