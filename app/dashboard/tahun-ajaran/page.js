@@ -337,7 +337,7 @@ export default function TahunAjaranPage() {
             </div>
           </div>
 
-          <div className="flex items-center mb-4">
+          {/* <div className="flex items-center mb-4">
             <input
               type="checkbox"
               id="isActive"
@@ -350,7 +350,7 @@ export default function TahunAjaranPage() {
             <label htmlFor="isActive" className="text-sm text-gray-300">
               Set sebagai tahun ajaran aktif
             </label>
-          </div>
+          </div> */}
 
           <button
             type="submit"
