@@ -54,8 +54,8 @@ const menuItems = [
         adminOnly: true
       },
       {
-        title: "Kelola Attendance",
-        path: "/dashboard/kelola-attendance",
+        title: "Daftar Kehadiran",
+        path: "/dashboard/Daftar Kehadiran",
         icon: <MdAssignment />,
         adminOnly: true
       },
