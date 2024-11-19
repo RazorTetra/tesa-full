@@ -53,12 +53,18 @@ const menuItems = [
         icon: <MdAssignment />,
         adminOnly: true
       },
-      // {
-      //   title: "Attendance",
-      //   path: "/dashboard/attendance",
-      //   icon: <MdAssignment />,
-      //   adminOnly: true
-      // },
+      {
+        title: "Kelola Attendance",
+        path: "/dashboard/kelola-attendance",
+        icon: <MdAssignment />,
+        adminOnly: true
+      },
+      {
+        title: "Kelola Absen",
+        path: "/dashboard/kelola-absen",
+        icon: <MdAssignment />,
+        adminOnly: true
+      },
       {
         title: "Tahun Ajaran",
         path: "/dashboard/tahun-ajaran",

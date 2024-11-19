@@ -2,9 +2,10 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/backend/config/database";
 import TahunAjaran from "@/backend/models/tahunAjaran";
+import TahunAjaranHistory from "@/backend/models/tahunAjaranHistory";
 import Attendance from "@/backend/models/attendance";
-import Siswa from "@/backend/models/siswa";
 import Absen from "@/backend/models/absen";
+import Siswa from "@/backend/models/siswa";
 import mongoose from "mongoose";
 
 export async function PUT(request, { params }) {
@@ -15,7 +16,6 @@ export async function PUT(request, { params }) {
 
     // Jika request untuk mengaktifkan tahun ajaran
     if (body.isActive) {
-      // Start transaction
       const session = await mongoose.startSession();
       session.startTransaction();
 
@@ -27,7 +27,7 @@ export async function PUT(request, { params }) {
           { session }
         );
 
-        // Aktifkan tahun ajaran yang dipilih menggunakan findOneAndUpdate
+        // Aktifkan tahun ajaran yang dipilih
         const tahunAjaran = await TahunAjaran.findByIdAndUpdate(
           id,
           { isActive: true },
@@ -41,7 +41,7 @@ export async function PUT(request, { params }) {
         // Dapatkan semua siswa aktif
         const siswaList = await Siswa.find({ status: "Aktif" });
 
-        // Buat attendance baru untuk setiap siswa dengan nilai awal 0
+        // Buat attendance baru untuk setiap siswa
         const attendancePromises = siswaList.map(siswa => {
           return Attendance.create([{
             siswaId: siswa._id,
@@ -74,10 +74,7 @@ export async function PUT(request, { params }) {
     }
 
     return NextResponse.json(
-      { 
-        success: false, 
-        error: "Invalid request" 
-      },
+      { success: false, error: "Invalid request" },
       { status: 400 }
     );
 
@@ -95,12 +92,10 @@ export async function DELETE(request, { params }) {
     await connectDB();
     const { id } = params;
 
-    // Start transaction
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
-      // Cek keberadaan tahun ajaran
       const tahunAjaran = await TahunAjaran.findById(id);
       if (!tahunAjaran) {
         return NextResponse.json(
@@ -109,52 +104,84 @@ export async function DELETE(request, { params }) {
         );
       }
 
-      // Cek apakah tahun ajaran sedang aktif
       if (tahunAjaran.isActive) {
         return NextResponse.json(
-          {
-            success: false,
-            error: "Tidak dapat menghapus tahun ajaran yang sedang aktif",
-          },
+          { success: false, error: "Tidak dapat menghapus tahun ajaran yang sedang aktif" },
           { status: 400 }
         );
       }
 
-      // Hapus semua attendance yang terkait
+      // Prepare data for history
+      const attendances = await Attendance.find({
+        tahunAjaran: tahunAjaran.tahunAjaran,
+        semester: tahunAjaran.semester
+      }).populate('siswaId');
+
+      const absens = await Absen.find({
+        tahunAjaran: tahunAjaran.tahunAjaran,
+        semester: tahunAjaran.semester
+      });
+
+      // Create history record
+      const historyData = {
+        tahunAjaran: tahunAjaran.tahunAjaran,
+        semester: tahunAjaran.semester,
+        totalHariEfektif: tahunAjaran.totalHariEfektif,
+        tanggalMulai: tahunAjaran.tanggalMulai,
+        tanggalSelesai: tahunAjaran.tanggalSelesai,
+        attendances: attendances.map(att => ({
+          siswaId: att.siswaId._id,
+          totalHadir: att.totalHadir,
+          totalSakit: att.totalSakit,
+          totalIzin: att.totalIzin,
+          totalAlpa: att.totalAlpa,
+          persentaseKehadiran: att.persentaseKehadiran,
+          absens: absens
+            .filter(ab => ab.siswaId.toString() === att.siswaId._id.toString())
+            .map(ab => ({
+              tanggal: ab.tanggal,
+              keterangan: ab.keterangan,
+              mataPelajaran: ab.mataPelajaran
+            }))
+        }))
+      };
+
+      await TahunAjaranHistory.create([historyData], { session });
+
+      // Delete related records
       await Attendance.deleteMany(
         {
           tahunAjaran: tahunAjaran.tahunAjaran,
-          semester: tahunAjaran.semester,
+          semester: tahunAjaran.semester
         },
         { session }
       );
 
-      // Hapus semua absensi yang terkait
       await Absen.deleteMany(
         {
           tahunAjaran: tahunAjaran.tahunAjaran,
-          semester: tahunAjaran.semester,
+          semester: tahunAjaran.semester
         },
         { session }
       );
 
-      // Hapus tahun ajaran
+      // Delete tahun ajaran
       await TahunAjaran.findByIdAndDelete(id, { session });
 
-      // Commit transaction
       await session.commitTransaction();
 
       return NextResponse.json({
         success: true,
-        message: "Tahun ajaran dan semua data terkait berhasil dihapus",
+        message: "Tahun ajaran berhasil diarsipkan dan dihapus"
       });
+
     } catch (error) {
-      // Rollback jika terjadi error
       await session.abortTransaction();
       throw error;
     } finally {
       session.endSession();
     }
+    
   } catch (error) {
     console.error("Error in tahun ajaran delete route:", error);
     return NextResponse.json(

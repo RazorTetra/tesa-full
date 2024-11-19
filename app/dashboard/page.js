@@ -156,8 +156,8 @@ function Card({ title, value, isHovered }) {
     <motion.div
       className={`p-6 rounded-2xl shadow-lg transition-all duration-300 bg-gradient-to-br ${
         isHovered
-          ? "from-indigo-500 to-purple-400"  // Gradient saat hover
-          : "from-indigo-950 to-slate-900"   // Gradient default
+          ? "from-indigo-500 to-purple-400" // Gradient saat hover
+          : "from-indigo-950 to-slate-900" // Gradient default
       } backdrop-blur-md bg-opacity-60`}
       whileHover={{
         scale: 1.05,
@@ -175,75 +175,79 @@ function Card({ title, value, isHovered }) {
   );
 }
 
-
-// Function Table
+// Optimized Table Component
 function Table({ students, attendanceData, tahunAjaranAktif }) {
   const [hoveredRow, setHoveredRow] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showAll, setShowAll] = useState(false);
-  
-  // Tambahkan SWR untuk data attendance
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Gunakan endpoint yang lebih ringan untuk data kehadiran
   const { data: attendanceStats } = useSWR(
-    tahunAjaranAktif 
-      ? `/api/attendance?semester=${tahunAjaranAktif.semester}&tahunAjaran=${tahunAjaranAktif.tahunAjaran}` 
+    tahunAjaranAktif
+      ? `/api/attendance?semester=${tahunAjaranAktif.semester}&tahunAjaran=${tahunAjaranAktif.tahunAjaran}`
       : null,
-    fetcher
+    fetcher,
+    { revalidateOnFocus: true } // Auto update saat focus
   );
-  
-  // Filter dan process data siswa dengan persentase kehadiran dari model Attendance
+
+  // Process dan filter data siswa
   const processedStudents = useMemo(() => {
     if (!students || !attendanceStats?.data) return [];
-    
-    return students
-      .map(student => {
-        // Cari data attendance untuk siswa ini
+
+    const filteredStudents = students
+      .map((student) => {
         const studentAttendance = attendanceStats.data.find(
-          record => record.siswaId._id === student._id
+          (record) => record.siswaId._id === student._id
         );
+
+        let percentage = 0;
+        if (studentAttendance && tahunAjaranAktif) {
+          const totalHadir = studentAttendance.totalHadir || 0;
+          const totalHariEfektif = tahunAjaranAktif.totalHariEfektif || 1;
+          percentage = (totalHadir / totalHariEfektif) * 100;
+        }
 
         return {
           ...student,
-          attendancePercentage: studentAttendance?.persentaseKehadiran || 0
+          attendance: studentAttendance || {
+            totalHadir: 0,
+            totalSakit: 0,
+            totalIzin: 0,
+            totalAlpa: 0,
+          },
+          attendancePercentage: percentage,
         };
       })
-      .filter(student => 
-        student.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        student.kelas.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        student.nisn?.toLowerCase().includes(searchQuery.toLowerCase())
+      .filter(
+        (student) =>
+          student.nama.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          student.kelas.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          student.nisn?.toLowerCase().includes(searchQuery.toLowerCase())
       );
-  }, [students, attendanceStats, searchQuery]);
 
-  // Tampilkan 5 data atau semua data
-  const displayedStudents = showAll ? processedStudents : processedStudents.slice(0, 5);
+    // Return semua hasil jika ada pencarian, atau 5 data teratas jika tidak ada
+    return searchQuery
+      ? filteredStudents.slice(0, 5)
+      : filteredStudents.slice(0, 5);
+  }, [students, attendanceStats, searchQuery, tahunAjaranAktif]);
 
   return (
     <div className="bg-gradient-to-br from-indigo-950 to-slate-900 p-6 rounded-2xl shadow-lg overflow-x-auto backdrop-blur-md bg-opacity-40">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
         <h2 className="text-3xl font-bold text-white">Data Siswa</h2>
-        <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
-          <div className="relative flex-grow sm:flex-grow-0 sm:min-w-[300px]">
-            <input
-              type="text"
-              placeholder="Cari siswa..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full px-4 py-2 rounded-lg bg-slate-800 text-white border border-slate-600 focus:outline-none focus:border-sky-500 transition-all"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
-              >
-                ×
-              </button>
-            )}
-          </div>
-          {processedStudents.length > 5 && (
+        <div className="relative flex-grow sm:flex-grow-0 sm:min-w-[300px]">
+          <input
+            type="text"
+            placeholder="Cari siswa (nama/kelas/NISN)..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full px-4 py-2 rounded-lg bg-slate-800 text-white border border-slate-600 focus:outline-none focus:border-sky-500 transition-all"
+          />
+          {searchQuery && (
             <button
-              onClick={() => setShowAll(!showAll)}
-              className="px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-700 text-white transition-all whitespace-nowrap"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
             >
-              {showAll ? 'Tampilkan Lebih Sedikit' : 'Lihat Semua'}
+              ×
             </button>
           )}
         </div>
@@ -254,56 +258,60 @@ function Table({ students, attendanceData, tahunAjaranAktif }) {
           Tidak ada siswa yang ditemukan
         </div>
       ) : (
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-sky-300">
-              <th className="text-left p-4 text-gray-300">Nama</th>
-              <th className="text-left p-4 text-gray-300">Kelas</th>
-              <th className="text-left p-4 text-gray-300">Kehadiran (%)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {displayedStudents.map((student, index) => (
-              <motion.tr
-                key={student._id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
-                onHoverStart={() => setHoveredRow(index)}
-                onHoverEnd={() => setHoveredRow(null)}
-                className={`transition-colors duration-200 ${
-                  hoveredRow === index
-                    ? "bg-sky-100 bg-opacity-50"
-                    : "hover:bg-sky-200 hover:bg-opacity-30"
-                }`}
-              >
-                <td className="p-4 text-gray-300">{student.nama}</td>
-                <td className="p-4 text-gray-300">{student.kelas}</td>
-                <td className="p-4">
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 bg-gray-600 rounded-full h-2.5">
-                      <motion.div
-                        className="bg-blue-400 h-2.5 rounded-full"
-                        initial={{ width: 0 }}
-                        animate={{ width: `${student.attendancePercentage}%` }}
-                        transition={{ duration: 1, delay: index * 0.1 }}
-                      />
+        <>
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-sky-300">
+                <th className="text-left p-4 text-gray-300">Nama</th>
+                <th className="text-left p-4 text-gray-300">Kelas</th>
+                <th className="text-left p-4 text-gray-300">Kehadiran (%)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {processedStudents.map((student, index) => (
+                <motion.tr
+                  key={student._id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.1 }}
+                  onHoverStart={() => setHoveredRow(index)}
+                  onHoverEnd={() => setHoveredRow(null)}
+                  className={`transition-colors duration-200 ${
+                    hoveredRow === index
+                      ? "bg-sky-100 bg-opacity-50"
+                      : "hover:bg-sky-200 hover:bg-opacity-30"
+                  }`}
+                >
+                  <td className="p-4 text-gray-300">{student.nama}</td>
+                  <td className="p-4 text-gray-300">{student.kelas}</td>
+                  <td className="p-4">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 bg-gray-600 rounded-full h-2.5">
+                        <motion.div
+                          className="bg-blue-400 h-2.5 rounded-full"
+                          initial={{ width: 0 }}
+                          animate={{
+                            width: `${student.attendancePercentage}%`,
+                          }}
+                          transition={{ duration: 1, delay: index * 0.1 }}
+                        />
+                      </div>
+                      <span className="min-w-[3ch] text-gray-300">
+                        {`${student.attendancePercentage.toFixed(1)}%`}
+                      </span>
                     </div>
-                    <span className="min-w-[3ch] text-gray-300">
-                      {`${student.attendancePercentage.toFixed(1)}%`}
-                    </span>
-                  </div>
-                </td>
-              </motion.tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      
-      {!showAll && processedStudents.length > 5 && (
-        <div className="text-center text-gray-400 mt-4">
-          Menampilkan 5 dari {processedStudents.length} siswa
-        </div>
+                  </td>
+                </motion.tr>
+              ))}
+            </tbody>
+          </table>
+          {!searchQuery && students.length > 5 && (
+            <div className="text-center text-gray-400 mt-4">
+              Menampilkan 5 dari {students.length} siswa. Gunakan pencarian
+              untuk menemukan siswa lainnya.
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -357,30 +365,50 @@ export default function Dashboard() {
   const [dailyAttendanceData, setDailyAttendanceData] = useState({});
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [tahunAjaranAktif, setTahunAjaranAktif] = useState(null);
- 
+
   // Config untuk data statis (guru, siswa, mutasi)
   const staticConfig = {
-    refreshInterval: 900000,     // 15 menit 
-    revalidateOnFocus: false,    
-    dedupingInterval: 600000,    // 10 menit cache
-    errorRetryCount: 2
+    refreshInterval: 900000, // 15 menit
+    revalidateOnFocus: false,
+    dedupingInterval: 600000, // 10 menit cache
+    errorRetryCount: 2,
   };
- 
+
   // Config untuk absensi (data realtime)
   const realtimeConfig = {
-    refreshInterval: 300000,    // 5 menit
+    refreshInterval: 300000, // 5 menit
     revalidateOnFocus: false,
-    dedupingInterval: 180000,   // 3 menit cache
-    errorRetryCount: 2
+    dedupingInterval: 180000, // 3 menit cache
+    errorRetryCount: 2,
   };
- 
+
   // Data statis
-  const { data: tahunAjaranData } = useSWR("/api/tahun-ajaran/active", fetcher, staticConfig);
-  const { data: studentsData, error: studentsError } = useSWR("/api/siswa", fetcher, staticConfig);
-  const { data: teachersData, error: teachersError } = useSWR("/api/guru", fetcher, staticConfig); 
-  const { data: mutasiMasukData, error: mutasiMasukError } = useSWR("/api/siswaMutasiMasuk", fetcher, staticConfig);
-  const { data: mutasiKeluarData, error: mutasiKeluarError } = useSWR("/api/siswaMutasiKeluar", fetcher, staticConfig);
- 
+  const { data: tahunAjaranData } = useSWR(
+    "/api/tahun-ajaran/active",
+    fetcher,
+    staticConfig
+  );
+  const { data: studentsData, error: studentsError } = useSWR(
+    "/api/siswa",
+    fetcher,
+    staticConfig
+  );
+  const { data: teachersData, error: teachersError } = useSWR(
+    "/api/guru",
+    fetcher,
+    staticConfig
+  );
+  const { data: mutasiMasukData, error: mutasiMasukError } = useSWR(
+    "/api/siswaMutasiMasuk",
+    fetcher,
+    staticConfig
+  );
+  const { data: mutasiKeluarData, error: mutasiKeluarError } = useSWR(
+    "/api/siswaMutasiKeluar",
+    fetcher,
+    staticConfig
+  );
+
   // Data realtime (absensi)
   const {
     data: absenData,
@@ -401,30 +429,41 @@ export default function Dashboard() {
       },
     }
   );
- 
+
   // Set tahun ajaran aktif when data is loaded
   useEffect(() => {
     if (tahunAjaranData?.success) {
       setTahunAjaranAktif(tahunAjaranData.data);
     }
   }, [tahunAjaranData]);
- 
-  const isLoading = !studentsData || !teachersData || !mutasiMasukData || !mutasiKeluarData || !absenData;
- 
+
+  const isLoading =
+    !studentsData ||
+    !teachersData ||
+    !mutasiMasukData ||
+    !mutasiKeluarData ||
+    !absenData;
+
   // Error Handling
-  if (studentsError || teachersError || mutasiMasukError || mutasiKeluarError || absenError) {
+  if (
+    studentsError ||
+    teachersError ||
+    mutasiMasukError ||
+    mutasiKeluarError ||
+    absenError
+  ) {
     MySwal.fire({
-      icon: "error", 
+      icon: "error",
       title: "Error",
       text: "Gagal mengambil data",
       toast: true,
-      position: "top-end", 
+      position: "top-end",
       showConfirmButton: false,
       timer: 3000,
       timerProgressBar: true,
     });
   }
- 
+
   if (isLoading) return <LoadingIndicator />;
 
   // Attendance Handling

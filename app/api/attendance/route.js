@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import connectDB from "../../../backend/config/database";
 import Attendance from "../../../backend/models/attendance";
 import Siswa from "../../../backend/models/siswa";
+import TahunAjaran from "../../../backend/models/tahunAjaran";
 
 export async function GET(request) {
   try {
@@ -60,16 +61,33 @@ export async function POST(request) {
       totalHadir,
       totalSakit,
       totalIzin,
-      totalAlpa,
-      totalHariEfektif
+      totalAlpa
     } = body;
 
-    if (!siswaId || !semester || !tahunAjaran || !totalHariEfektif) {
+    if (!siswaId || !semester || !tahunAjaran) {
       return NextResponse.json(
         { success: false, error: "Mohon lengkapi semua field yang dibutuhkan" },
         { status: 400 }
       );
     }
+
+    // Cek tahun ajaran aktif
+    const tahunAjaranData = await TahunAjaran.findOne({
+      tahunAjaran,
+      semester: parseInt(semester),
+      isActive: true
+    });
+
+    if (!tahunAjaranData) {
+      return NextResponse.json(
+        { success: false, error: "Tahun ajaran tidak aktif atau tidak ditemukan" },
+        { status: 404 }
+      );
+    }
+
+    // Hitung persentase kehadiran
+    const persentaseKehadiran = 
+      (totalHadir / tahunAjaranData.totalHariEfektif) * 100;
 
     const attendance = await Attendance.findOneAndUpdate(
       { siswaId, semester, tahunAjaran },
@@ -78,7 +96,7 @@ export async function POST(request) {
         totalSakit: totalSakit || 0,
         totalIzin: totalIzin || 0,
         totalAlpa: totalAlpa || 0,
-        totalHariEfektif
+        persentaseKehadiran: Math.round(persentaseKehadiran * 100) / 100
       },
       {
         new: true,

@@ -1,8 +1,9 @@
 // backend/controllers/attendanceController.js
-const Attendance = require("../models/attendance");
-const Siswa = require("../models/siswa");
+import Attendance from '../models/attendance.js';
+import TahunAjaran from '../models/tahunAjaran.js';
+import Siswa from '../models/siswa.js';
 
-exports.getAllAttendance = async (req, res) => {
+export const getAllAttendance = async (req, res) => {
   try {
     const attendance = await Attendance.find()
       .populate('siswaId', 'nama nisn kelas');
@@ -12,10 +13,24 @@ exports.getAllAttendance = async (req, res) => {
   }
 };
 
-exports.getAttendanceBySemester = async (req, res) => {
+export const getAttendanceBySemester = async (req, res) => {
   try {
     const { semester, tahunAjaran } = req.query;
     
+    // Validasi tahun ajaran aktif
+    const activeTahunAjaran = await TahunAjaran.findOne({
+      tahunAjaran,
+      semester: parseInt(semester),
+      isActive: true
+    });
+
+    if (!activeTahunAjaran) {
+      return res.status(404).json({
+        success: false,
+        error: "Tahun ajaran tidak aktif atau tidak ditemukan"
+      });
+    }
+
     const attendance = await Attendance.find({
       semester: parseInt(semester),
       tahunAjaran
@@ -27,7 +42,7 @@ exports.getAttendanceBySemester = async (req, res) => {
   }
 };
 
-exports.getAttendanceByClass = async (req, res) => {
+export const getAttendanceByClass = async (req, res) => {
   try {
     const { kelas, semester, tahunAjaran } = req.query;
     
@@ -47,7 +62,7 @@ exports.getAttendanceByClass = async (req, res) => {
   }
 };
 
-exports.getStudentAttendance = async (req, res) => {
+export const getStudentAttendance = async (req, res) => {
   try {
     const { id } = req.params;
     const { semester, tahunAjaran } = req.query;
@@ -71,7 +86,7 @@ exports.getStudentAttendance = async (req, res) => {
   }
 };
 
-exports.createOrUpdateAttendance = async (req, res) => {
+export const createOrUpdateAttendance = async (req, res) => {
   try {
     const { 
       siswaId, 
@@ -80,19 +95,32 @@ exports.createOrUpdateAttendance = async (req, res) => {
       totalHadir,
       totalSakit,
       totalIzin,
-      totalAlpa,
-      totalHariEfektif
+      totalAlpa
     } = req.body;
 
     // Validasi input
-    if (!siswaId || !semester || !tahunAjaran || !totalHariEfektif) {
+    if (!siswaId || !semester || !tahunAjaran) {
       return res.status(400).json({
         success: false,
         error: "Mohon lengkapi semua field yang dibutuhkan"
       });
     }
 
-    // Cek apakah siswa ada
+    // Cek tahun ajaran aktif
+    const activeTahunAjaran = await TahunAjaran.findOne({
+      tahunAjaran,
+      semester: parseInt(semester),
+      isActive: true
+    });
+
+    if (!activeTahunAjaran) {
+      return res.status(400).json({
+        success: false,
+        error: "Tahun ajaran tidak aktif"
+      });
+    }
+
+    // Cek siswa
     const siswa = await Siswa.findById(siswaId);
     if (!siswa) {
       return res.status(404).json({
@@ -101,19 +129,18 @@ exports.createOrUpdateAttendance = async (req, res) => {
       });
     }
 
-    // Cari attendance yang sudah ada atau buat baru
+    // Cari atau buat attendance
     const attendance = await Attendance.findOneAndUpdate(
       { 
         siswaId,
-        semester,
+        semester: parseInt(semester),
         tahunAjaran
       },
       {
         totalHadir: totalHadir || 0,
         totalSakit: totalSakit || 0,
         totalIzin: totalIzin || 0,
-        totalAlpa: totalAlpa || 0,
-        totalHariEfektif
+        totalAlpa: totalAlpa || 0
       },
       {
         new: true,
@@ -128,7 +155,32 @@ exports.createOrUpdateAttendance = async (req, res) => {
   }
 };
 
-exports.deleteAttendance = async (req, res) => {
+export const syncAttendance = async (req, res) => {
+  try {
+    const { tahunAjaranId } = req.body;
+
+    if (!tahunAjaranId) {
+      return res.status(400).json({
+        success: false,
+        error: "ID tahun ajaran diperlukan"
+      });
+    }
+
+    await Attendance.syncWithSiswa(tahunAjaranId);
+
+    res.status(200).json({
+      success: true,
+      message: "Sinkronisasi attendance berhasil"
+    });
+  } catch (error) {
+    res.status(400).json({
+      success: false,
+      error: error.message
+    });
+  }
+};
+
+export const deleteAttendance = async (req, res) => {
   try {
     const { id } = req.params;
     

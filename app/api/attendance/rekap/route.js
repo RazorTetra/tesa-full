@@ -22,7 +22,7 @@ export async function GET(request) {
       );
     }
 
-    // Dapatkan data tahun ajaran
+    // Dapatkan data tahun ajaran untuk total hari efektif
     const tahunAjaranData = await TahunAjaran.findOne({
       tahunAjaran,
       semester: parseInt(semester)
@@ -35,6 +35,8 @@ export async function GET(request) {
       );
     }
 
+    const totalHariEfektif = tahunAjaranData.totalHariEfektif;
+
     // Base query untuk siswa
     let siswaQuery = {};
     if (kelas) {
@@ -43,37 +45,24 @@ export async function GET(request) {
 
     // Dapatkan semua siswa
     const siswaList = await Siswa.find(siswaQuery);
-    
-    // Dapatkan total hari efektif per kelas berdasarkan jadwal mata pelajaran
-    const hariEfektifPerKelas = {};
-    for (const siswa of siswaList) {
-      if (!hariEfektifPerKelas[siswa.kelas]) {
-        // Hitung berdasarkan unique dates dari absensi
-        const uniqueDays = await Absen.distinct('tanggal', {
-          kelas: siswa.kelas,
-          semester: parseInt(semester),
-          tahunAjaran
-        });
-        
-        hariEfektifPerKelas[siswa.kelas] = uniqueDays.length || tahunAjaranData.totalHariEfektif || 0;
-      }
-    }
 
     // Dapatkan rekap kehadiran untuk semua siswa
     const rekapKehadiran = await Promise.all(
       siswaList.map(async (siswa) => {
+        // Ambil semua absensi siswa untuk semester dan tahun ajaran ini
         const absensiDetail = await Absen.find({
           siswaId: siswa._id,
           semester: parseInt(semester),
           tahunAjaran
         });
 
-        const totalHariEfektif = hariEfektifPerKelas[siswa.kelas];
+        // Hitung total untuk setiap jenis kehadiran
         const totalHadir = absensiDetail.filter(a => a.keterangan === 'HADIR').length;
         const totalSakit = absensiDetail.filter(a => a.keterangan === 'SAKIT').length;
         const totalIzin = absensiDetail.filter(a => a.keterangan === 'IZIN').length;
         const totalAlpa = absensiDetail.filter(a => a.keterangan === 'ALPA').length;
-        
+
+        // Hitung persentase berdasarkan total hari efektif
         const persentaseKehadiran = totalHariEfektif > 0 
           ? (totalHadir / totalHariEfektif) * 100 
           : 0;
@@ -90,8 +79,7 @@ export async function GET(request) {
             totalSakit,
             totalIzin,
             totalAlpa,
-            totalHariEfektif,
-            persentaseKehadiran
+            persentaseKehadiran: Math.round(persentaseKehadiran * 100) / 100
           },
           { upsert: true }
         );
@@ -110,17 +98,12 @@ export async function GET(request) {
             alpa: totalAlpa,
             totalHariEfektif,
             persentase: persentaseKehadiran.toFixed(2)
-          },
-          riwayatAbsensi: absensiDetail.map(absen => ({
-            tanggal: absen.tanggal,
-            keterangan: absen.keterangan,
-            mataPelajaran: absen.mataPelajaran
-          }))
+          }
         };
       })
     );
 
-    // Hitung statistik per kelas dengan data yang lebih akurat
+    // Hitung statistik per kelas
     const statistikKelas = {};
     rekapKehadiran.forEach((rekap) => {
       const kelas = rekap.siswa.kelas;
@@ -128,7 +111,7 @@ export async function GET(request) {
         statistikKelas[kelas] = {
           totalSiswa: 0,
           rataRataKehadiran: 0,
-          totalHariEfektif: hariEfektifPerKelas[kelas],
+          totalHariEfektif,
           detailKehadiran: {
             hadir: 0,
             sakit: 0,
@@ -158,10 +141,11 @@ export async function GET(request) {
       data: {
         periode: {
           semester,
-          tahunAjaran
+          tahunAjaran,
+          totalHariEfektif
         },
-        rekapKehadiran: rekapKehadiran,
-        statistikKelas: statistikKelas
+        rekapKehadiran,
+        statistikKelas
       }
     });
   } catch (error) {

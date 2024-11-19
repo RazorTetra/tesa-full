@@ -15,4 +15,10 @@ router.get('/kelas', absenController.getAbsensiByKelas);
 // Get today's absensi
 router.get('/today', absenController.getTodayAbsensi);
 
+// Update absensi
+router.put('/:id', absenController.updateAbsensi);
+
+// Delete absensi
+router.delete('/:id', absenController.deleteAbsensi);
+
 module.exports = router;

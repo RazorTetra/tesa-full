@@ -5,17 +5,9 @@ import connectDB from "@/backend/config/database";
 import User from "@/backend/models/user";
 import Siswa from "@/backend/models/siswa";
 
-// Helper untuk koneksi database
-const connectToDatabase = async () => {
-  if (!global.mongoose) {
-    global.mongoose = connectDB();
-  }
-  await global.mongoose;
-};
-
 export async function GET(request) {
-  await connectToDatabase();
   try {
+    await connectDB();
     const users = await User.find().select("-password");
     return NextResponse.json({ success: true, data: users });
   } catch (error) {
@@ -28,32 +20,55 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
-  await connectToDatabase();
-  let createdUser = null;
-
   try {
+    await connectDB();
     const body = await request.json();
     const { nama, username, email, password, phone, pengguna, image } = body;
 
     // Validasi input dasar
-    const requiredFields = ["nama", "username", "email", "password", "phone", "pengguna"];
-    const missingFields = requiredFields.filter(field => !body[field]);
-    
+    const requiredFields = [
+      "nama",
+      "username",
+      "email",
+      "password",
+      "phone",
+      "pengguna",
+    ];
+    const missingFields = requiredFields.filter((field) => !body[field]);
+
     if (missingFields.length > 0) {
       return NextResponse.json(
-        { 
-          success: false, 
-          error: `Field berikut harus diisi: ${missingFields.join(", ")}` 
+        {
+          success: false,
+          error: `Field berikut harus diisi: ${missingFields.join(", ")}`,
         },
         { status: 400 }
       );
     }
 
-    // Cek apakah username sudah ada
-    const existingUser = await User.findOne({ username });
+    // Validasi format email
+    const emailRegex = /.+\@.+\..+/;
+    if (!emailRegex.test(email)) {
+      return NextResponse.json(
+        { success: false, error: "Format email tidak valid" },
+        { status: 400 }
+      );
+    }
+
+    // Cek duplikasi username dan email
+    const existingUser = await User.findOne({
+      $or: [{ username }, { email }],
+    });
+
     if (existingUser) {
       return NextResponse.json(
-        { success: false, error: "Username sudah digunakan" },
+        {
+          success: false,
+          error:
+            existingUser.username === username
+              ? "Username sudah digunakan"
+              : "Email sudah digunakan",
+        },
         { status: 400 }
       );
     }
@@ -70,12 +85,13 @@ export async function POST(request) {
       phone,
       pengguna,
       image: image || "/noavatar.png",
+      imagePublicId: "tesa_skripsi/defaults/no-avatar",
     };
 
-    // Jika ini pembuatan user untuk siswa (dari form siswa)
+    // Jika ini pembuatan user untuk siswa
     if (body.isSiswa) {
       const { nisn, kelas, alamat, status } = body;
-      
+
       // Validasi tambahan untuk siswa
       if (!nisn || !kelas || !alamat || !status) {
         return NextResponse.json(
@@ -84,58 +100,74 @@ export async function POST(request) {
         );
       }
 
-      // Buat user
-      createdUser = await User.create(userData);
+      // Cek duplikasi NISN
+      const existingSiswa = await Siswa.findOne({ nisn });
+      if (existingSiswa) {
+        return NextResponse.json(
+          { success: false, error: "NISN sudah terdaftar" },
+          { status: 400 }
+        );
+      }
 
-      // Buat data siswa
-      const siswaData = {
-        nama,
-        nisn,
-        kelas,
-        alamat,
-        status,
-        image: image || "/noavatar.png",
-        userId: createdUser._id,
-      };
+      // Start session untuk transaksi
+      const session = await User.startSession();
+      session.startTransaction();
 
-      const siswa = await Siswa.create(siswaData);
-
-      return NextResponse.json({
-        success: true,
-        data: siswa,
-        credentials: {
-          username,
-          password: password, // Password asli untuk ditampilkan sekali
-          email
-        }
-      }, { status: 201 });
-    }
-
-    // Untuk pembuatan user biasa
-    createdUser = await User.create(userData);
-    const userResponse = { ...createdUser.toObject() };
-    delete userResponse.password;
-
-    return NextResponse.json({
-      success: true,
-      data: userResponse
-    }, { status: 201 });
-
-  } catch (error) {
-    // Cleanup jika terjadi error
-    if (createdUser) {
       try {
-        await User.findByIdAndDelete(createdUser._id);
-      } catch (cleanupError) {
-        console.error("Cleanup error:", cleanupError);
+        // Buat user
+        const createdUser = await User.create([userData], { session });
+
+        // Buat data siswa
+        const siswaData = {
+          nama,
+          nisn,
+          kelas,
+          alamat,
+          status,
+          image: image || "/noavatar.png",
+          imagePublicId: "tesa_skripsi/defaults/no-avatar",
+          userId: createdUser[0]._id,
+        };
+
+        const siswa = await Siswa.create([siswaData], { session });
+        await session.commitTransaction();
+
+        return NextResponse.json(
+          {
+            success: true,
+            data: siswa[0],
+            credentials: {
+              username,
+              password, // Password asli untuk ditampilkan sekali
+              email,
+            },
+          },
+          { status: 201 }
+        );
+      } catch (error) {
+        await session.abortTransaction();
+        throw error;
+      } finally {
+        session.endSession();
       }
     }
 
+    // Untuk pembuatan user biasa
+    const createdUser = await User.create(userData);
+    const userResponse = { ...createdUser.toObject() };
+    delete userResponse.password;
+
     return NextResponse.json(
-      { 
-        success: false, 
-        error: `Gagal membuat user: ${error.message}` 
+      {
+        success: true,
+        data: userResponse,
       },
+      { status: 201 }
+    );
+  } catch (error) {
+    console.error("Error creating user:", error);
+    return NextResponse.json(
+      { success: false, error: error.message },
       { status: 500 }
     );
   }
