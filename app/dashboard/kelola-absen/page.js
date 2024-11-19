@@ -1,11 +1,8 @@
 // app/kelola-absen/page.js
 "use client";
 import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
 
 export default function KelolaAbsen() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
   const [absenList, setAbsenList] = useState([]);
@@ -88,10 +85,6 @@ export default function KelolaAbsen() {
     }
   }, [apiUrl, filterKelas, filterTanggal, filterTahunAjaran, filterSemester]);
 
-  const handleEdit = (absen) => {
-    setEditData(absen);
-    setEditMode(true);
-  };
 
   const handleUpdate = async (e) => {
     e.preventDefault();

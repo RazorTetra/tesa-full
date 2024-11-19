@@ -101,7 +101,7 @@ export default function KelolaAbsen() {
     <div className="p-6 space-y-6">
       <div className="bg-gray-800 rounded-lg shadow-xl">
         <div className="p-6">
-          <h2 className="text-2xl font-bold text-gray-100">Kelola Absensi</h2>
+          <h2 className="text-2xl font-bold text-gray-100">Daftar Kehadiran</h2>
           {activeTahunAjaran && (
             <p className="mt-2 text-gray-300">
               Tahun Ajaran: {activeTahunAjaran.tahunAjaran} - Semester{" "}
