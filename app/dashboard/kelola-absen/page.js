@@ -356,12 +356,12 @@ export default function KelolaAbsen() {
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <button
+                  {/* <button
                     onClick={() => handleEdit(absen)}
                     className="text-blue-400 hover:text-blue-300 mr-4"
                   >
                     Edit
-                  </button>
+                  </button> */}
                   <button
                     onClick={() => handleDelete(absen._id)}
                     className="text-red-400 hover:text-red-300"
