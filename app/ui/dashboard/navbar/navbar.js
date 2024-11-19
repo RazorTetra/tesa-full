@@ -55,7 +55,7 @@ const menuItems = [
       },
       {
         title: "Daftar Kehadiran",
-        path: "/dashboard/Daftar Kehadiran",
+        path: "/dashboard/daftar-kehadiran",
         icon: <MdAssignment />,
         adminOnly: true
       },
