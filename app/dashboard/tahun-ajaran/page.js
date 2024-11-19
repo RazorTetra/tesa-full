@@ -107,6 +107,13 @@ export default function TahunAjaranPage() {
     fetchTahunAjaran();
   }, []);
 
+  const LoadingAlert = MySwal.mixin({
+    allowOutsideClick: false,
+    didOpen: () => {
+      MySwal.showLoading();
+    },
+  });
+
   const validateForm = () => {
     // Validasi format tahun ajaran
     const tahunAjaranRegex = /^\d{4}\/\d{4}$/;
@@ -173,7 +180,7 @@ export default function TahunAjaranPage() {
     try {
       const confirmation = await MySwal.fire({
         title: "Konfirmasi",
-        text: "Apakah Anda yakin ingin mengaktifkan tahun ajaran ini?",
+        text: "Apakah Anda yakin ingin mengaktifkan tahun ajaran ini? Sistem akan membuat data attendance untuk semua siswa.",
         icon: "warning",
         showCancelButton: true,
         confirmButtonText: "Ya, Aktifkan",
@@ -181,6 +188,12 @@ export default function TahunAjaranPage() {
       });
 
       if (confirmation.isConfirmed) {
+        // Tampilkan loading state
+        LoadingAlert.fire({
+          title: "Sedang Memproses",
+          html: "Mengaktifkan tahun ajaran dan membuat data attendance...",
+        });
+
         const response = await fetch(`/api/tahun-ajaran/${id}`, {
           method: "PUT",
           headers: {
@@ -190,11 +203,21 @@ export default function TahunAjaranPage() {
         });
 
         const data = await response.json();
+
+        // Tutup loading alert
+        LoadingAlert.close();
+
         if (data.success) {
           await MySwal.fire({
             icon: "success",
             title: "Berhasil",
-            text: "Status tahun ajaran berhasil diubah",
+            html: `
+              ${data.data.message}<br/>
+              <small class="text-gray-500">
+                Total siswa: ${data.data.totalSiswa}<br/>
+                Data attendance dibuat: ${data.data.totalAttendanceRecords}
+              </small>
+            `,
           });
           fetchTahunAjaran();
         } else {
@@ -202,10 +225,12 @@ export default function TahunAjaranPage() {
         }
       }
     } catch (error) {
+      LoadingAlert.close();
       MySwal.fire({
         icon: "error",
         title: "Error",
         text: "Gagal mengubah status tahun ajaran: " + error.message,
+        footer: "Silakan coba lagi atau hubungi administrator",
       });
     }
   };

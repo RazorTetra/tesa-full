@@ -252,6 +252,9 @@ function Table({ students, attendanceData, tahunAjaranAktif }) {
           )}
         </div>
       </div>
+      <div className="mb-4">
+        <p className="italic text-sm">Jika Data tidak muncul, silahkan refresh halaman</p>
+      </div>
 
       {processedStudents.length === 0 ? (
         <div className="text-center text-gray-300 py-8">
